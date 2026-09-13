@@ -2,23 +2,32 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from numbers import Integral
+from dataclasses import dataclass, field
+from numbers import Integral, Real
+from types import MappingProxyType
+from typing import Mapping
 
 import numpy as np
 from numpy.typing import NDArray
 
 from rca_sim.contracts import (
+    EvidenceRecord,
     FaultType,
     LOG_READINGS_PER_SERVICE,
     LogCategory,
     METRIC_READINGS_PER_CATEGORY,
+    LogEvidenceRecord,
     MetricCategory,
+    MetricEvidenceRecord,
     RelationshipKind,
     ServiceRelationship,
     Workload,
 )
-from rca_sim.graph import DependencyGraph, classify_service_relationship
+from rca_sim.graph import (
+    DependencyGraph,
+    classify_service_relationship,
+    generate_dependency_graph,
+)
 from rca_sim.likelihoods import (
     log_category_probabilities,
     metric_high_probabilities,
@@ -27,6 +36,7 @@ from rca_sim.likelihoods import (
 
 BoolArray = NDArray[np.bool_]
 IntArray = NDArray[np.int64]
+GENERATOR_VERSION = "sim_v0"
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +110,110 @@ class SyntheticObservations:
     @property
     def n_services(self) -> int:
         return int(self.metric_readings.shape[0])
+
+
+@dataclass(frozen=True, slots=True)
+class HiddenIncidentWorld:
+    """A complete evaluator-only incident with frozen evidence records."""
+
+    graph: DependencyGraph
+    hypothesis: HiddenHypothesis
+    observations: SyntheticObservations
+    incident_seed: int
+    generator_version: str = GENERATOR_VERSION
+    extra_edge_probability: float = 0.15
+    _evidence_by_id: Mapping[str, EvidenceRecord] = field(
+        init=False,
+        repr=False,
+        compare=False,
+    )
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.graph, DependencyGraph):
+            raise TypeError("graph must be a DependencyGraph")
+        if not isinstance(self.hypothesis, HiddenHypothesis):
+            raise TypeError("hypothesis must be a HiddenHypothesis")
+        if not isinstance(self.observations, SyntheticObservations):
+            raise TypeError("observations must be SyntheticObservations")
+        if self.observations.n_services != self.graph.n_services:
+            raise ValueError("observation and graph service counts must match")
+        if self.hypothesis.cause_service >= self.graph.n_services:
+            raise ValueError("hypothesis cause_service is not present in graph")
+
+        incident_seed = _validate_incident_seed(self.incident_seed)
+        if not isinstance(self.generator_version, str) or not self.generator_version:
+            raise ValueError("generator_version must be a nonempty string")
+        edge_probability = _validate_edge_probability(self.extra_edge_probability)
+
+        records: dict[str, EvidenceRecord] = {}
+        for service_id in range(self.graph.n_services):
+            for metric in MetricCategory:
+                for reading_index in range(METRIC_READINGS_PER_CATEGORY):
+                    record = MetricEvidenceRecord(
+                        service_id=service_id,
+                        metric=metric,
+                        reading_index=reading_index,
+                        value=bool(
+                            self.observations.metric_readings[
+                                service_id,
+                                metric,
+                                reading_index,
+                            ]
+                        ),
+                    )
+                    records[record.evidence_id] = record
+
+            for reading_index in range(LOG_READINGS_PER_SERVICE):
+                record = LogEvidenceRecord(
+                    service_id=service_id,
+                    reading_index=reading_index,
+                    value=LogCategory(
+                        self.observations.log_readings[service_id, reading_index]
+                    ),
+                )
+                records[record.evidence_id] = record
+
+        expected_count = self.graph.n_services * (
+            len(MetricCategory) * METRIC_READINGS_PER_CATEGORY
+            + LOG_READINGS_PER_SERVICE
+        )
+        if len(records) != expected_count:
+            raise RuntimeError("generated duplicate evidence IDs")
+
+        object.__setattr__(self, "incident_seed", incident_seed)
+        object.__setattr__(self, "extra_edge_probability", edge_probability)
+        object.__setattr__(self, "_evidence_by_id", MappingProxyType(records))
+
+    @property
+    def evidence_by_id(self) -> Mapping[str, EvidenceRecord]:
+        """Return the complete read-only evaluator evidence map."""
+        return self._evidence_by_id
+
+    @property
+    def evidence_ids(self) -> tuple[str, ...]:
+        return tuple(self._evidence_by_id)
+
+    def get_evidence(self, evidence_id: str) -> EvidenceRecord:
+        """Return one frozen record without sampling or changing world state."""
+        if not isinstance(evidence_id, str):
+            raise TypeError("evidence_id must be a string")
+        try:
+            return self._evidence_by_id[evidence_id]
+        except KeyError as error:
+            raise KeyError(f"unknown evidence ID: {evidence_id}") from error
+
+    def replay(self) -> HiddenIncidentWorld:
+        """Regenerate this incident from its stored generation metadata."""
+        if self.generator_version != GENERATOR_VERSION:
+            raise ValueError(
+                f"cannot replay generator version {self.generator_version!r}; "
+                f"this runtime supports {GENERATOR_VERSION!r}"
+            )
+        return generate_incident_world(
+            n_services=self.graph.n_services,
+            incident_seed=self.incident_seed,
+            extra_edge_probability=self.extra_edge_probability,
+        )
 
 
 def enumerate_hidden_hypotheses(n_services: int) -> tuple[HiddenHypothesis, ...]:
@@ -186,3 +300,48 @@ def generate_synthetic_observations(
         )
 
     return SyntheticObservations(metrics, logs)
+
+
+def generate_incident_world(
+    *,
+    n_services: int,
+    incident_seed: int,
+    extra_edge_probability: float = 0.15,
+) -> HiddenIncidentWorld:
+    """Generate a complete incident once from replayable metadata."""
+    incident_seed = _validate_incident_seed(incident_seed)
+    extra_edge_probability = _validate_edge_probability(extra_edge_probability)
+    rng = np.random.default_rng(incident_seed)
+    graph = generate_dependency_graph(
+        n_services,
+        rng,
+        extra_edge_probability=extra_edge_probability,
+    )
+    hypothesis = sample_hidden_hypothesis(graph, rng)
+    observations = generate_synthetic_observations(graph, hypothesis, rng)
+    return HiddenIncidentWorld(
+        graph=graph,
+        hypothesis=hypothesis,
+        observations=observations,
+        incident_seed=incident_seed,
+        generator_version=GENERATOR_VERSION,
+        extra_edge_probability=extra_edge_probability,
+    )
+
+
+def _validate_incident_seed(seed: int) -> int:
+    if isinstance(seed, bool) or not isinstance(seed, Integral):
+        raise TypeError("incident_seed must be an integer")
+    seed = int(seed)
+    if seed < 0:
+        raise ValueError("incident_seed must be nonnegative")
+    return seed
+
+
+def _validate_edge_probability(probability: float) -> float:
+    if isinstance(probability, bool) or not isinstance(probability, Real):
+        raise TypeError("extra_edge_probability must be a real number")
+    probability = float(probability)
+    if not np.isfinite(probability) or not 0.0 <= probability <= 1.0:
+        raise ValueError("extra_edge_probability must be between 0 and 1")
+    return probability

@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 4.5 of the small simulator execution plan were completed on 2026-09-13.
+Steps 3 through 5.1 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -31,3 +31,13 @@ directed distance.
 world generation and exact inference. A generated observation set contains two
 binary metric readings per category and three categorical log readings per
 service. These arrays are copied and made read-only after sampling.
+
+`generate_incident_world` freezes the graph, hidden hypothesis, observations,
+and 72 evidence records for the default eight-service incident. Evidence IDs
+derive from validated record fields, reads are immutable lookups, and the world
+retains the seed and generator settings required for replay.
+
+`rca_sim.tools` defines the four semantic probe templates in stable index order.
+Each template owns its fixed credit cost and evidence coverage. Probe collection
+reads the world's frozen records, works for every active service, and never
+resamples or mutates the incident.

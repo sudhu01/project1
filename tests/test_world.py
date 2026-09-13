@@ -5,10 +5,12 @@ from dataclasses import FrozenInstanceError
 import numpy as np
 import pytest
 
+from rca_sim.contracts import MetricEvidenceRecord
 from rca_sim.graph import DependencyGraph
 from rca_sim.world import (
     FaultType,
     HiddenHypothesis,
+    HiddenIncidentWorld,
     LogCategory,
     MetricCategory,
     RelationshipKind,
@@ -16,6 +18,7 @@ from rca_sim.world import (
     Workload,
     classify_service_relationship,
     enumerate_hidden_hypotheses,
+    generate_incident_world,
     generate_synthetic_observations,
     sample_hidden_hypothesis,
 )
@@ -365,4 +368,140 @@ def test_generation_rejects_cause_outside_graph() -> None:
             _test_graph(),
             HiddenHypothesis(8, FaultType.CPU, Workload.NORMAL),
             np.random.default_rng(0),
+        )
+
+
+def test_complete_incident_assigns_all_stable_evidence_ids() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=20260913)
+
+    assert len(world.evidence_ids) == 72
+    assert len(set(world.evidence_ids)) == 72
+    assert "metrics/service-3/cpu/0" in world.evidence_by_id
+    assert "metrics/service-3/memory/1" in world.evidence_by_id
+    assert "metrics/service-3/latency/1" in world.evidence_by_id
+    assert "logs/service-3/0" in world.evidence_by_id
+    assert "logs/service-3/2" in world.evidence_by_id
+
+
+def test_evidence_records_match_frozen_observation_arrays() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=314159)
+
+    metric_record = world.get_evidence("metrics/service-3/latency/1")
+    log_record = world.get_evidence("logs/service-3/2")
+
+    assert metric_record.evidence_id == "metrics/service-3/latency/1"
+    assert metric_record.kind == "latency_high"
+    assert metric_record.value is bool(
+        world.observations.metric_readings[3, MetricCategory.LATENCY_HIGH, 1]
+    )
+    assert log_record.evidence_id == "logs/service-3/2"
+    assert log_record.kind == "log_category"
+    assert log_record.value is LogCategory(world.observations.log_readings[3, 2])
+
+
+def test_repeated_reads_return_the_same_record_without_mutation() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=271828)
+    before_ids = world.evidence_ids
+
+    first = world.get_evidence("metrics/service-5/cpu/0")
+    world.get_evidence("logs/service-1/2")
+    second = world.get_evidence("metrics/service-5/cpu/0")
+
+    assert first is second
+    assert world.evidence_ids == before_ids
+    with pytest.raises(TypeError):
+        world.evidence_by_id["new-id"] = first  # type: ignore[index]
+
+
+def test_evidence_lookup_order_does_not_change_unseen_records() -> None:
+    forward = generate_incident_world(n_services=8, incident_seed=161803)
+    reverse = generate_incident_world(n_services=8, incident_seed=161803)
+
+    for evidence_id in forward.evidence_ids:
+        forward.get_evidence(evidence_id)
+    for evidence_id in reversed(reverse.evidence_ids):
+        reverse.get_evidence(evidence_id)
+
+    assert forward.evidence_by_id == reverse.evidence_by_id
+    np.testing.assert_array_equal(
+        forward.observations.metric_readings,
+        reverse.observations.metric_readings,
+    )
+    np.testing.assert_array_equal(
+        forward.observations.log_readings,
+        reverse.observations.log_readings,
+    )
+
+
+def test_incident_replays_exactly_from_stored_metadata() -> None:
+    original = generate_incident_world(
+        n_services=8,
+        incident_seed=np.int64(424242),
+        extra_edge_probability=0.35,
+    )
+    replayed = original.replay()
+
+    assert original.incident_seed == 424242
+    assert original.generator_version == "sim_v0"
+    assert original.extra_edge_probability == pytest.approx(0.35)
+    assert original.graph.entry_service == replayed.graph.entry_service
+    np.testing.assert_array_equal(original.graph.adjacency, replayed.graph.adjacency)
+    assert original.hypothesis == replayed.hypothesis
+    assert original.evidence_by_id == replayed.evidence_by_id
+
+
+def test_unknown_evidence_id_fails_without_changing_world() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=7)
+    before = world.evidence_ids
+
+    with pytest.raises(KeyError, match="unknown evidence ID"):
+        world.get_evidence("metrics/service-99/cpu/0")
+
+    assert world.evidence_ids == before
+
+
+@pytest.mark.parametrize(
+    ("seed", "probability", "error"),
+    [
+        (-1, 0.15, ValueError),
+        (True, 0.15, TypeError),
+        (1, -0.1, ValueError),
+        (1, 1.1, ValueError),
+        (1, float("nan"), ValueError),
+    ],
+)
+def test_incident_generation_validates_replay_metadata(
+    seed: int,
+    probability: float,
+    error: type[Exception],
+) -> None:
+    with pytest.raises(error):
+        generate_incident_world(
+            n_services=8,
+            incident_seed=seed,
+            extra_edge_probability=probability,
+        )
+
+
+def test_replay_rejects_unknown_generator_version() -> None:
+    current = generate_incident_world(n_services=8, incident_seed=19)
+    old = HiddenIncidentWorld(
+        graph=current.graph,
+        hypothesis=current.hypothesis,
+        observations=current.observations,
+        incident_seed=current.incident_seed,
+        generator_version="sim_v999",
+    )
+
+    with pytest.raises(ValueError, match="cannot replay"):
+        old.replay()
+
+
+def test_metric_record_rejects_boolean_category_encoding() -> None:
+    with pytest.raises(TypeError, match="metric"):
+        MetricEvidenceRecord(
+            service_id=0,
+            metric=False,  # type: ignore[arg-type]
+            reading_index=0,
+            value=False,
         )
