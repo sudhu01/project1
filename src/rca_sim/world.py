@@ -3,68 +3,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import IntEnum
 from numbers import Integral
 
 import numpy as np
+from numpy.typing import NDArray
 
-from rca_sim.graph import DependencyGraph
-
-
-class FaultType(IntEnum):
-    """Supported root-cause fault families in their model encoding order."""
-
-    CPU = 0
-    MEMORY = 1
-    NETWORK_DELAY = 2
-
-
-class Workload(IntEnum):
-    """Hidden background workload condition."""
-
-    NORMAL = 0
-    BUSY = 1
-
-
-class RelationshipKind(IntEnum):
-    """How an observed service relates to a candidate cause service."""
-
-    CAUSE = 0
-    AFFECTED_CALLER = 1
-    UNRELATED = 2
+from rca_sim.contracts import (
+    FaultType,
+    LOG_READINGS_PER_SERVICE,
+    LogCategory,
+    METRIC_READINGS_PER_CATEGORY,
+    MetricCategory,
+    RelationshipKind,
+    ServiceRelationship,
+    Workload,
+)
+from rca_sim.graph import DependencyGraph, classify_service_relationship
+from rca_sim.likelihoods import (
+    log_category_probabilities,
+    metric_high_probabilities,
+)
 
 
-@dataclass(frozen=True, slots=True)
-class ServiceRelationship:
-    """A relationship category and its directed distance to the cause."""
-
-    kind: RelationshipKind
-    distance: int | None
-
-    def __post_init__(self) -> None:
-        if isinstance(self.kind, bool) or not isinstance(self.kind, Integral):
-            raise TypeError("kind must be an integer encoding")
-        try:
-            kind = RelationshipKind(int(self.kind))
-        except (TypeError, ValueError) as error:
-            raise ValueError("relationship kind is not supported") from error
-        object.__setattr__(self, "kind", kind)
-
-        if self.distance is not None:
-            if isinstance(self.distance, bool) or not isinstance(
-                self.distance, Integral
-            ):
-                raise TypeError("distance must be an integer or None")
-            object.__setattr__(self, "distance", int(self.distance))
-
-        if kind is RelationshipKind.CAUSE and self.distance != 0:
-            raise ValueError("cause relationship must have distance 0")
-        if kind is RelationshipKind.AFFECTED_CALLER and (
-            self.distance is None or self.distance < 1
-        ):
-            raise ValueError("affected caller relationship needs a positive distance")
-        if kind is RelationshipKind.UNRELATED and self.distance is not None:
-            raise ValueError("unrelated relationship must have no distance")
+BoolArray = NDArray[np.bool_]
+IntArray = NDArray[np.int64]
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +62,46 @@ class HiddenHypothesis:
             raise ValueError("workload is not supported") from error
 
 
+@dataclass(frozen=True, slots=True)
+class SyntheticObservations:
+    """Persistent metric and log samples for one hidden incident."""
+
+    metric_readings: BoolArray
+    log_readings: IntArray
+
+    def __post_init__(self) -> None:
+        metrics = np.asarray(self.metric_readings)
+        logs = np.asarray(self.log_readings)
+        expected_metric_tail = (len(MetricCategory), METRIC_READINGS_PER_CATEGORY)
+        expected_log_width = LOG_READINGS_PER_SERVICE
+
+        if metrics.ndim != 3 or metrics.shape[1:] != expected_metric_tail:
+            raise ValueError("metric_readings must have shape (services, 3, 2)")
+        if metrics.shape[0] < 1:
+            raise ValueError("observations must contain at least one service")
+        if metrics.dtype != np.bool_:
+            raise TypeError("metric_readings must use boolean values")
+        if logs.ndim != 2 or logs.shape[1] != expected_log_width:
+            raise ValueError("log_readings must have shape (services, 3)")
+        if logs.shape[0] != metrics.shape[0]:
+            raise ValueError("metric and log service counts must match")
+        if not np.issubdtype(logs.dtype, np.integer):
+            raise TypeError("log_readings must use integer category values")
+        if np.any(logs < 0) or np.any(logs >= len(LogCategory)):
+            raise ValueError("log_readings contain an unsupported category")
+
+        metrics = np.array(metrics, dtype=np.bool_, copy=True)
+        logs = np.array(logs, dtype=np.int64, copy=True)
+        metrics.flags.writeable = False
+        logs.flags.writeable = False
+        object.__setattr__(self, "metric_readings", metrics)
+        object.__setattr__(self, "log_readings", logs)
+
+    @property
+    def n_services(self) -> int:
+        return int(self.metric_readings.shape[0])
+
+
 def enumerate_hidden_hypotheses(n_services: int) -> tuple[HiddenHypothesis, ...]:
     """Return the complete uniform-prior hypothesis space in stable order."""
     if isinstance(n_services, bool) or not isinstance(n_services, Integral):
@@ -133,24 +135,54 @@ def sample_hidden_hypothesis(
     )
 
 
-def classify_service_relationship(
+def generate_synthetic_observations(
     graph: DependencyGraph,
-    *,
-    observed_service: int,
-    cause_service: int,
-) -> ServiceRelationship:
-    """Classify one service using caller-to-dependency path direction.
-
-    A service is an affected caller only when it can reach the candidate cause
-    by following call edges. A service downstream of the cause is unrelated in
-    this first propagation model.
-    """
+    hypothesis: HiddenHypothesis,
+    rng: np.random.Generator,
+) -> SyntheticObservations:
+    """Sample all metric and log records once for a hidden hypothesis."""
     if not isinstance(graph, DependencyGraph):
         raise TypeError("graph must be a DependencyGraph")
+    if not isinstance(hypothesis, HiddenHypothesis):
+        raise TypeError("hypothesis must be a HiddenHypothesis")
+    if not isinstance(rng, np.random.Generator):
+        raise TypeError("rng must be a numpy.random.Generator")
+    if hypothesis.cause_service >= graph.n_services:
+        raise ValueError("hypothesis cause_service is not present in graph")
 
-    distance = graph.shortest_path_distance(observed_service, cause_service)
-    if distance == 0:
-        return ServiceRelationship(RelationshipKind.CAUSE, distance=0)
-    if distance is not None:
-        return ServiceRelationship(RelationshipKind.AFFECTED_CALLER, distance)
-    return ServiceRelationship(RelationshipKind.UNRELATED, distance=None)
+    metrics = np.empty(
+        (graph.n_services, len(MetricCategory), METRIC_READINGS_PER_CATEGORY),
+        dtype=np.bool_,
+    )
+    logs = np.empty(
+        (graph.n_services, LOG_READINGS_PER_SERVICE),
+        dtype=np.int64,
+    )
+
+    for service in range(graph.n_services):
+        relationship = classify_service_relationship(
+            graph,
+            observed_service=service,
+            cause_service=hypothesis.cause_service,
+        )
+        metric_probabilities = metric_high_probabilities(
+            relationship,
+            hypothesis.fault_type,
+            hypothesis.workload,
+        )
+        metrics[service] = rng.random(
+            (len(MetricCategory), METRIC_READINGS_PER_CATEGORY)
+        ) < metric_probabilities[:, np.newaxis]
+
+        log_probabilities = log_category_probabilities(
+            relationship,
+            hypothesis.fault_type,
+            hypothesis.workload,
+        )
+        logs[service] = rng.choice(
+            len(LogCategory),
+            size=LOG_READINGS_PER_SERVICE,
+            p=log_probabilities,
+        )
+
+    return SyntheticObservations(metrics, logs)

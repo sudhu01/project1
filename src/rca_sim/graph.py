@@ -14,6 +14,8 @@ from typing import Iterable
 import numpy as np
 from numpy.typing import NDArray
 
+from rca_sim.contracts import RelationshipKind, ServiceRelationship
+
 
 BoolArray = NDArray[np.bool_]
 IntArray = NDArray[np.int64]
@@ -185,6 +187,29 @@ def generate_dependency_graph(
         public_edges,
         entry_service=int(permutation[0]),
     )
+
+
+def classify_service_relationship(
+    graph: DependencyGraph,
+    *,
+    observed_service: int,
+    cause_service: int,
+) -> ServiceRelationship:
+    """Classify one service using caller-to-dependency path direction.
+
+    A service is an affected caller only when it can reach the candidate cause
+    by following call edges. A service downstream of the cause is unrelated in
+    this propagation model.
+    """
+    if not isinstance(graph, DependencyGraph):
+        raise TypeError("graph must be a DependencyGraph")
+
+    distance = graph.shortest_path_distance(observed_service, cause_service)
+    if distance == 0:
+        return ServiceRelationship(RelationshipKind.CAUSE, distance=0)
+    if distance is not None:
+        return ServiceRelationship(RelationshipKind.AFFECTED_CALLER, distance)
+    return ServiceRelationship(RelationshipKind.UNRELATED, distance=None)
 
 
 def _all_pairs_shortest_path_distances(adjacency: BoolArray) -> IntArray:

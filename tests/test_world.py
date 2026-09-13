@@ -9,11 +9,14 @@ from rca_sim.graph import DependencyGraph
 from rca_sim.world import (
     FaultType,
     HiddenHypothesis,
+    LogCategory,
+    MetricCategory,
     RelationshipKind,
     ServiceRelationship,
     Workload,
     classify_service_relationship,
     enumerate_hidden_hypotheses,
+    generate_synthetic_observations,
     sample_hidden_hypothesis,
 )
 
@@ -282,3 +285,84 @@ def test_relationship_record_enforces_distance_invariants(
 ) -> None:
     with pytest.raises(ValueError):
         ServiceRelationship(kind, distance)
+
+
+def test_synthetic_observation_shapes_types_and_reproducibility() -> None:
+    graph = _test_graph()
+    hypothesis = HiddenHypothesis(6, FaultType.NETWORK_DELAY, Workload.BUSY)
+    first = generate_synthetic_observations(
+        graph,
+        hypothesis,
+        np.random.default_rng(123),
+    )
+    second = generate_synthetic_observations(
+        graph,
+        hypothesis,
+        np.random.default_rng(123),
+    )
+
+    assert first.n_services == 8
+    assert first.metric_readings.shape == (8, 3, 2)
+    assert first.metric_readings.dtype == np.bool_
+    assert first.log_readings.shape == (8, 3)
+    assert first.log_readings.dtype == np.int64
+    assert np.all((0 <= first.log_readings) & (first.log_readings < 4))
+    np.testing.assert_array_equal(first.metric_readings, second.metric_readings)
+    np.testing.assert_array_equal(first.log_readings, second.log_readings)
+
+
+def test_synthetic_observations_are_persistent_read_only_samples() -> None:
+    observations = generate_synthetic_observations(
+        _test_graph(),
+        HiddenHypothesis(3, FaultType.CPU, Workload.NORMAL),
+        np.random.default_rng(55),
+    )
+
+    with pytest.raises(ValueError):
+        observations.metric_readings[0, MetricCategory.CPU_HIGH, 0] = False
+    with pytest.raises(ValueError):
+        observations.log_readings[0, 0] = LogCategory.OTHER_ERROR
+
+
+def test_sample_frequencies_match_fixed_hypothesis_likelihoods() -> None:
+    graph = _test_graph()
+    hypothesis = HiddenHypothesis(3, FaultType.CPU, Workload.NORMAL)
+    rng = np.random.default_rng(8675309)
+    sample_count = 10_000
+    metric_counts = np.zeros(len(MetricCategory), dtype=np.int64)
+    log_counts = np.zeros(len(LogCategory), dtype=np.int64)
+
+    for _ in range(sample_count):
+        observations = generate_synthetic_observations(graph, hypothesis, rng)
+        metric_counts += observations.metric_readings[3].sum(axis=1)
+        log_counts += np.bincount(
+            observations.log_readings[3],
+            minlength=len(LogCategory),
+        )
+
+    metric_trials = sample_count * 2
+    expected_metrics = np.array([0.85, 0.15, 0.75])
+    metric_standard_errors = np.sqrt(
+        expected_metrics * (1.0 - expected_metrics) / metric_trials
+    )
+    assert np.all(
+        np.abs(metric_counts / metric_trials - expected_metrics)
+        <= 5.0 * metric_standard_errors + 0.002
+    )
+
+    log_trials = sample_count * 3
+    expected_logs = np.array([0.10, 0.65, 0.15, 0.10])
+    log_standard_errors = np.sqrt(expected_logs * (1.0 - expected_logs) / log_trials)
+    assert np.all(
+        np.abs(log_counts / log_trials - expected_logs)
+        <= 5.0 * log_standard_errors + 0.002
+    )
+
+
+def test_generation_rejects_cause_outside_graph() -> None:
+    with pytest.raises(ValueError, match="not present"):
+        generate_synthetic_observations(
+            _test_graph(),
+            HiddenHypothesis(8, FaultType.CPU, Workload.NORMAL),
+            np.random.default_rng(0),
+        )

@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 4.3 of the small simulator execution plan were completed on 2026-09-13.
+Steps 3 through 4.5 of the small simulator execution plan were completed on 2026-09-13.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -26,3 +26,8 @@ alert does not filter or otherwise change that prior.
 generation and public likelihood calculations. It follows edges from an
 observed caller toward the candidate failed dependency and reports the shortest
 directed distance.
+
+`rca_sim.likelihoods` owns the metric and log probability model used by both
+world generation and exact inference. A generated observation set contains two
+binary metric readings per category and three categorical log readings per
+service. These arrays are copied and made read-only after sampling.
