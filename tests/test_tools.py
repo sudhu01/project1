@@ -4,15 +4,24 @@ from dataclasses import FrozenInstanceError
 
 import numpy as np
 import pytest
+from gymnasium.spaces import Discrete
 
 from rca_sim.contracts import LogEvidenceRecord, MetricCategory, MetricEvidenceRecord
 from rca_sim.tools import (
+    ACTION_SPACE_SIZE,
+    MAX_SERVICE_SLOTS,
     PROBE_TEMPLATES,
+    PROBE_TEMPLATE_NAMES,
+    STOP_ACTION_INDEX,
+    TEMPLATES_PER_SERVICE,
     ProbePreset,
     ProbeTemplate,
     ProbeTool,
     collect_probe_evidence,
+    decode_probe_action,
     get_probe_template,
+    is_stop_action,
+    probe_action_index,
 )
 from rca_sim.world import generate_incident_world
 
@@ -151,3 +160,90 @@ def test_template_rejects_coverage_that_disagrees_with_its_semantics() -> None:
             cost_credits=4,
             reading_indices=(0, 1),
         )
+
+
+def test_action_mapping_constants_match_the_fixed_padded_space() -> None:
+    assert PROBE_TEMPLATE_NAMES == (
+        "metrics.quick",
+        "metrics.detailed",
+        "logs.quick",
+        "logs.detailed",
+    )
+    assert TEMPLATES_PER_SERVICE == 4
+    assert MAX_SERVICE_SLOTS == 10
+    assert STOP_ACTION_INDEX == 40
+    assert ACTION_SPACE_SIZE == 41
+
+    action_space = Discrete(ACTION_SPACE_SIZE)
+    assert action_space.contains(0)
+    assert action_space.contains(STOP_ACTION_INDEX)
+    assert not action_space.contains(ACTION_SPACE_SIZE)
+
+
+@pytest.mark.parametrize(
+    ("service_slot", "template_name", "expected_index"),
+    [
+        (0, "metrics.quick", 0),
+        (0, "logs.detailed", 3),
+        (3, "logs.quick", 14),
+        (9, "metrics.quick", 36),
+        (9, "logs.detailed", 39),
+    ],
+)
+def test_probe_action_index_uses_service_major_template_order(
+    service_slot: int,
+    template_name: str,
+    expected_index: int,
+) -> None:
+    assert probe_action_index(service_slot, template_name) == expected_index
+
+
+def test_all_forty_probe_indices_round_trip() -> None:
+    encoded_indices: list[int] = []
+
+    for service_slot in range(MAX_SERVICE_SLOTS):
+        for template_name in PROBE_TEMPLATE_NAMES:
+            action_index = probe_action_index(service_slot, template_name)
+            decoded_slot, decoded_template = decode_probe_action(action_index)
+            encoded_indices.append(action_index)
+
+            assert decoded_slot == service_slot
+            assert decoded_template is PROBE_TEMPLATES[template_name]
+
+    assert encoded_indices == list(range(STOP_ACTION_INDEX))
+
+
+def test_stop_is_fixed_after_every_padded_probe_slot() -> None:
+    assert is_stop_action(np.int64(40))
+    assert not is_stop_action(0)
+    with pytest.raises(ValueError, match="STOP"):
+        decode_probe_action(STOP_ACTION_INDEX)
+
+
+def test_eight_active_services_occupy_the_first_thirty_two_probe_slots() -> None:
+    active_probe_indices = {
+        probe_action_index(service_slot, template_name)
+        for service_slot in range(8)
+        for template_name in PROBE_TEMPLATE_NAMES
+    }
+    padded_probe_indices = set(range(32, STOP_ACTION_INDEX))
+
+    assert active_probe_indices == set(range(32))
+    assert len(padded_probe_indices) == 8
+    assert active_probe_indices.isdisjoint(padded_probe_indices)
+
+
+@pytest.mark.parametrize("service_slot", [-1, 10, False, 1.5])
+def test_probe_action_index_rejects_invalid_service_slots(
+    service_slot: object,
+) -> None:
+    with pytest.raises((TypeError, ValueError), match="service_slot"):
+        probe_action_index(service_slot, "metrics.quick")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("action_index", [-1, 41, False, 1.5])
+def test_action_decoding_rejects_indices_outside_discrete_space(
+    action_index: object,
+) -> None:
+    with pytest.raises((TypeError, ValueError), match="action_index"):
+        decode_probe_action(action_index)  # type: ignore[arg-type]
