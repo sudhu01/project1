@@ -9,7 +9,10 @@ from rca_sim.graph import DependencyGraph
 from rca_sim.world import (
     FaultType,
     HiddenHypothesis,
+    RelationshipKind,
+    ServiceRelationship,
     Workload,
+    classify_service_relationship,
     enumerate_hidden_hypotheses,
     sample_hidden_hypothesis,
 )
@@ -143,3 +146,139 @@ def test_sampler_requires_graph_and_generator() -> None:
         sample_hidden_hypothesis(8, np.random.default_rng(0))  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="rng"):
         sample_hidden_hypothesis(graph, 0)  # type: ignore[arg-type]
+
+
+def test_chain_relationships_propagate_from_dependency_to_callers() -> None:
+    graph = DependencyGraph.from_edges(
+        4,
+        [(0, 1), (1, 2), (2, 3)],
+        entry_service=0,
+    )
+
+    assert classify_service_relationship(
+        graph, observed_service=3, cause_service=3
+    ) == ServiceRelationship(
+        RelationshipKind.CAUSE,
+        distance=0,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=0, cause_service=3
+    ) == ServiceRelationship(
+        RelationshipKind.AFFECTED_CALLER,
+        distance=3,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=2, cause_service=1
+    ) == ServiceRelationship(
+        RelationshipKind.UNRELATED,
+        distance=None,
+    )
+
+
+def test_branching_tree_keeps_sibling_branch_unrelated() -> None:
+    graph = DependencyGraph.from_edges(
+        5,
+        [(0, 1), (0, 2), (1, 3), (1, 4)],
+        entry_service=0,
+    )
+
+    assert classify_service_relationship(
+        graph, observed_service=0, cause_service=3
+    ) == ServiceRelationship(
+        RelationshipKind.AFFECTED_CALLER,
+        distance=2,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=1, cause_service=3
+    ) == ServiceRelationship(
+        RelationshipKind.AFFECTED_CALLER,
+        distance=1,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=2, cause_service=3
+    ) == ServiceRelationship(
+        RelationshipKind.UNRELATED,
+        distance=None,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=4, cause_service=3
+    ) == ServiceRelationship(
+        RelationshipKind.UNRELATED,
+        distance=None,
+    )
+
+
+def test_shared_dependency_uses_the_shortest_caller_path() -> None:
+    graph = DependencyGraph.from_edges(
+        5,
+        [(0, 1), (0, 2), (1, 3), (2, 3), (3, 4), (0, 4)],
+        entry_service=0,
+    )
+
+    assert classify_service_relationship(
+        graph, observed_service=0, cause_service=4
+    ) == ServiceRelationship(
+        RelationshipKind.AFFECTED_CALLER,
+        distance=1,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=1, cause_service=4
+    ) == ServiceRelationship(
+        RelationshipKind.AFFECTED_CALLER,
+        distance=2,
+    )
+    assert classify_service_relationship(
+        graph, observed_service=2, cause_service=4
+    ) == ServiceRelationship(
+        RelationshipKind.AFFECTED_CALLER,
+        distance=2,
+    )
+
+
+def test_every_service_gets_exactly_one_relationship() -> None:
+    graph = _test_graph()
+
+    for cause_service in range(graph.n_services):
+        relationships = [
+            classify_service_relationship(
+                graph,
+                observed_service=observed_service,
+                cause_service=cause_service,
+            )
+            for observed_service in range(graph.n_services)
+        ]
+        assert relationships[cause_service].kind is RelationshipKind.CAUSE
+        assert sum(item.kind is RelationshipKind.CAUSE for item in relationships) == 1
+        assert all(item.kind in RelationshipKind for item in relationships)
+
+
+@pytest.mark.parametrize(
+    ("observed_service", "cause_service"),
+    [(-1, 0), (0, -1), (8, 0), (0, 8)],
+)
+def test_relationship_classifier_rejects_invalid_service_ids(
+    observed_service: int,
+    cause_service: int,
+) -> None:
+    with pytest.raises(ValueError, match="out of range"):
+        classify_service_relationship(
+            _test_graph(),
+            observed_service=observed_service,
+            cause_service=cause_service,
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "distance"),
+    [
+        (RelationshipKind.CAUSE, None),
+        (RelationshipKind.AFFECTED_CALLER, 0),
+        (RelationshipKind.UNRELATED, 1),
+    ],
+)
+def test_relationship_record_enforces_distance_invariants(
+    kind: RelationshipKind,
+    distance: int | None,
+) -> None:
+    with pytest.raises(ValueError):
+        ServiceRelationship(kind, distance)

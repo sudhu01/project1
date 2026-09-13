@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 4.2 of the small simulator execution plan were completed on 2026-09-13.
+Steps 3 through 4.3 of the small simulator execution plan were completed on 2026-09-13.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -21,3 +21,8 @@ service IDs even though construction starts in a temporary topological order.
 `rca_sim.world` defines and samples the private incident hypothesis. Cause
 service, fault type, and workload use independent uniform priors. The entry
 alert does not filter or otherwise change that prior.
+
+`classify_service_relationship` is the single relationship rule for world
+generation and public likelihood calculations. It follows edges from an
+observed caller toward the candidate failed dependency and reports the shortest
+directed distance.

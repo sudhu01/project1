@@ -26,6 +26,47 @@ class Workload(IntEnum):
     BUSY = 1
 
 
+class RelationshipKind(IntEnum):
+    """How an observed service relates to a candidate cause service."""
+
+    CAUSE = 0
+    AFFECTED_CALLER = 1
+    UNRELATED = 2
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceRelationship:
+    """A relationship category and its directed distance to the cause."""
+
+    kind: RelationshipKind
+    distance: int | None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.kind, bool) or not isinstance(self.kind, Integral):
+            raise TypeError("kind must be an integer encoding")
+        try:
+            kind = RelationshipKind(int(self.kind))
+        except (TypeError, ValueError) as error:
+            raise ValueError("relationship kind is not supported") from error
+        object.__setattr__(self, "kind", kind)
+
+        if self.distance is not None:
+            if isinstance(self.distance, bool) or not isinstance(
+                self.distance, Integral
+            ):
+                raise TypeError("distance must be an integer or None")
+            object.__setattr__(self, "distance", int(self.distance))
+
+        if kind is RelationshipKind.CAUSE and self.distance != 0:
+            raise ValueError("cause relationship must have distance 0")
+        if kind is RelationshipKind.AFFECTED_CALLER and (
+            self.distance is None or self.distance < 1
+        ):
+            raise ValueError("affected caller relationship needs a positive distance")
+        if kind is RelationshipKind.UNRELATED and self.distance is not None:
+            raise ValueError("unrelated relationship must have no distance")
+
+
 @dataclass(frozen=True, slots=True)
 class HiddenHypothesis:
     """The private service, fault, and workload state for one incident."""
@@ -90,3 +131,26 @@ def sample_hidden_hypothesis(
         fault_type=FaultType(int(rng.integers(len(FaultType)))),
         workload=Workload(int(rng.integers(len(Workload)))),
     )
+
+
+def classify_service_relationship(
+    graph: DependencyGraph,
+    *,
+    observed_service: int,
+    cause_service: int,
+) -> ServiceRelationship:
+    """Classify one service using caller-to-dependency path direction.
+
+    A service is an affected caller only when it can reach the candidate cause
+    by following call edges. A service downstream of the cause is unrelated in
+    this first propagation model.
+    """
+    if not isinstance(graph, DependencyGraph):
+        raise TypeError("graph must be a DependencyGraph")
+
+    distance = graph.shortest_path_distance(observed_service, cause_service)
+    if distance == 0:
+        return ServiceRelationship(RelationshipKind.CAUSE, distance=0)
+    if distance is not None:
+        return ServiceRelationship(RelationshipKind.AFFECTED_CALLER, distance)
+    return ServiceRelationship(RelationshipKind.UNRELATED, distance=None)
