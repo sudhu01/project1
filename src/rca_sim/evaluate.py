@@ -18,6 +18,7 @@ from rca_sim.baselines import (
     ImmediateStopPolicy,
     RandomAcquisitionPolicy,
     RandomIncludingStopPolicy,
+    ScriptedInvestigatorPolicy,
 )
 from rca_sim.environment import InvestigationEnv
 from rca_sim.world import HiddenIncidentWorld
@@ -28,6 +29,7 @@ EnvironmentFactory = Callable[[], InvestigationEnv]
 
 DEFAULT_PROBE_BUDGETS = (1, 2, 4, 6)
 DEFAULT_ACTION_SEEDS = (9101, 9102, 9103, 9104, 9105)
+DEFAULT_SCRIPT_THRESHOLDS = (0.60, 0.75, 0.90, 0.99)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,9 +109,11 @@ def evaluate_baselines(
     *,
     probe_budgets: Sequence[int] = DEFAULT_PROBE_BUDGETS,
     action_seeds: Sequence[int] = DEFAULT_ACTION_SEEDS,
+    script_thresholds: Sequence[float] = DEFAULT_SCRIPT_THRESHOLDS,
     include_stop: bool = True,
     include_random: bool = True,
     include_random_smoke: bool = True,
+    include_script: bool = True,
     environment_factory: EnvironmentFactory = InvestigationEnv,
 ) -> tuple[EvaluationRow, ...]:
     """Evaluate baseline variants while reusing every case across methods."""
@@ -132,6 +136,11 @@ def evaluate_baselines(
         )
     if include_random_smoke:
         policies.extend(RandomIncludingStopPolicy(seed=seed) for seed in seeds)
+    if include_script:
+        policies.extend(
+            ScriptedInvestigatorPolicy(confidence_threshold=threshold)
+            for threshold in _unique_thresholds(script_thresholds)
+        )
     if not policies:
         raise ValueError("at least one baseline method must be enabled")
 
@@ -252,6 +261,21 @@ def _unique_nonnegative(
     return tuple(result)
 
 
+def _unique_thresholds(values: Sequence[float]) -> tuple[float, ...]:
+    result: list[float] = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("script_thresholds must contain real numbers")
+        threshold = float(value)
+        if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
+            raise ValueError("script_thresholds must be between 0 and 1")
+        if threshold not in result:
+            result.append(threshold)
+    if not result:
+        raise ValueError("script_thresholds cannot be empty")
+    return tuple(result)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path)
@@ -259,14 +283,20 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--methods",
         nargs="+",
-        choices=("stop", "random", "random_stop"),
-        default=("stop", "random", "random_stop"),
+        choices=("stop", "random", "random_stop", "script"),
+        default=("stop", "random", "random_stop", "script"),
     )
     parser.add_argument(
         "--probe-budgets", nargs="+", type=int, default=DEFAULT_PROBE_BUDGETS
     )
     parser.add_argument(
         "--action-seeds", nargs="+", type=int, default=DEFAULT_ACTION_SEEDS
+    )
+    parser.add_argument(
+        "--script-thresholds",
+        nargs="+",
+        type=float,
+        default=DEFAULT_SCRIPT_THRESHOLDS,
     )
     parser.add_argument("--output", type=Path, required=True)
     return parser
@@ -279,9 +309,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         _case_paths(args.cases),
         probe_budgets=args.probe_budgets,
         action_seeds=args.action_seeds,
+        script_thresholds=args.script_thresholds,
         include_stop="stop" in methods,
         include_random="random" in methods,
         include_random_smoke="random_stop" in methods,
+        include_script="script" in methods,
         environment_factory=_environment_factory_from_config(args.config),
     )
     summaries = aggregate_results(rows)

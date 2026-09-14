@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.5 and baseline steps 9.1 and 9.2 of the small simulator
+Steps 3 through 8.5 and baseline steps 9.1 through 9.3 of the small simulator
 execution plan were completed on 2026-09-15.
 
 - Python: CPython 3.12.13, 64-bit
@@ -138,3 +138,9 @@ writes method-level accuracy, return, credit, and probe summaries to
 `summary.json`. The default random evaluation uses five action seeds. The
 `random_stop` method remains separately named so it cannot be mistaken for the
 stronger fixed-budget random baseline.
+
+The scripted investigator starts with quick metrics at the entry service. It
+then visits dependencies in breadth-first order, with ascending public service
+ID as the tie-breaker. After the first probe, it stops when the largest service
+belief reaches its configured confidence threshold. Evaluation expands the
+planned thresholds 0.60, 0.75, 0.90, and 0.99 into separate named methods.

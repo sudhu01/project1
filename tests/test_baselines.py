@@ -8,6 +8,7 @@ import pytest
 from rca_sim.baselines import (
     ImmediateStopPolicy,
     RandomIncludingStopPolicy,
+    ScriptedInvestigatorPolicy,
 )
 from rca_sim.environment import InvestigationEnv
 from rca_sim.evaluate import aggregate_results, evaluate_baselines, main
@@ -27,6 +28,7 @@ def test_immediate_stop_never_acquires_evidence() -> None:
         _cases(),
         include_random=False,
         include_random_smoke=False,
+        include_script=False,
     )
 
     assert len(rows) == 4
@@ -46,6 +48,7 @@ def test_random_acquisition_excludes_stop_until_probe_budget(probe_budget: int) 
         action_seeds=(17,),
         include_stop=False,
         include_random_smoke=False,
+        include_script=False,
     )
     row = rows[0]
 
@@ -65,6 +68,7 @@ def test_random_policy_replays_with_same_action_seed_on_same_cases() -> None:
         action_seeds=(23,),
         include_stop=False,
         include_random_smoke=False,
+        include_script=False,
     )
 
     first = evaluate_baselines(_cases(), **settings)
@@ -80,6 +84,7 @@ def test_random_action_seed_does_not_change_incident_cases() -> None:
         action_seeds=(1, 2, 3),
         include_stop=False,
         include_random_smoke=False,
+        include_script=False,
     )
 
     by_case = {}
@@ -111,6 +116,7 @@ def test_aggregate_results_keeps_random_variants_separate() -> None:
         probe_budgets=(1, 2),
         action_seeds=(4, 5),
         include_random_smoke=False,
+        include_script=False,
     )
 
     summary = {row.method: row for row in aggregate_results(rows)}
@@ -170,3 +176,71 @@ def test_evaluate_cli_writes_episode_rows_and_summary(tmp_path) -> None:
         "validation-001",
     }
     assert {row["method"] for row in summary} == {"stop", "random_1_probes"}
+
+
+def test_script_starts_at_entry_then_uses_dependency_breadth_first_order() -> None:
+    env = InvestigationEnv()
+    observation, info = env.reset(seed=930)
+    policy = ScriptedInvestigatorPolicy(confidence_threshold=1.0)
+    entry = int(info["entry_service"])
+
+    first_action = policy.select_action(observation)
+    observation, _, terminated, _, _ = env.step(first_action)
+
+    assert first_action == 4 * entry
+    assert not terminated
+
+    adjacency = observation["adjacency"]
+    order = [entry]
+    seen = {entry}
+    cursor = 0
+    while cursor < len(order):
+        caller = order[cursor]
+        cursor += 1
+        for dependency in np.flatnonzero(adjacency[caller]):
+            service_id = int(dependency)
+            if service_id not in seen:
+                seen.add(service_id)
+                order.append(service_id)
+
+    second_action = policy.select_action(observation)
+    assert second_action == 4 * order[1]
+
+
+def test_script_checks_confidence_after_entry_probe() -> None:
+    env = InvestigationEnv()
+    observation, info = env.reset(seed=931)
+    policy = ScriptedInvestigatorPolicy(confidence_threshold=0.0)
+
+    first_action = policy.select_action(observation)
+    observation, _, terminated, _, _ = env.step(first_action)
+
+    assert first_action == 4 * int(info["entry_service"])
+    assert not terminated
+    assert policy.select_action(observation) == STOP_ACTION_INDEX
+
+
+def test_script_threshold_variants_are_evaluated_without_action_seeds() -> None:
+    rows = evaluate_baselines(
+        _cases(2),
+        script_thresholds=(0.60, 0.75, 0.90, 0.99),
+        include_stop=False,
+        include_random=False,
+        include_random_smoke=False,
+    )
+
+    assert len(rows) == 8
+    assert {row.method for row in rows} == {
+        "script_0.60",
+        "script_0.75",
+        "script_0.90",
+        "script_0.99",
+    }
+    assert {row.action_seed for row in rows} == {None}
+    assert all(row.actions[0] != STOP_ACTION_INDEX for row in rows)
+
+
+@pytest.mark.parametrize("threshold", [-0.01, 1.01, float("nan")])
+def test_script_rejects_invalid_confidence_threshold(threshold: float) -> None:
+    with pytest.raises(ValueError, match="confidence_threshold"):
+        ScriptedInvestigatorPolicy(confidence_threshold=threshold)
