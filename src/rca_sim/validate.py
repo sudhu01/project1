@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import gymnasium as gym
+from gymnasium.utils.env_checker import check_env
 
 from rca_sim.belief import ExactBeliefEstimator, recompute_posterior
 from rca_sim.contracts import (
@@ -60,6 +62,7 @@ from rca_sim.world import (
 
 MIN_OBSERVATION_SAMPLES = 10_000
 MIN_TRANSITION_SAMPLES = 10_000
+GYM_ROLLOUT_TRANSITIONS = 1_000
 DEFAULT_PRIOR_SAMPLES = 60_000
 DEFAULT_SEED = 20260914
 NUMERICAL_MARGIN = 0.001
@@ -127,6 +130,11 @@ def run_validation(
         _validate_mask_edges(seed + 6),
         _validate_label_isolation(seed + 7),
         _validate_trace_equivalence(seed + 8),
+        _validate_gymnasium_checker(seed + 9),
+        _validate_mask_aware_gymnasium_rollout(
+            seed + 10,
+            GYM_ROLLOUT_TRANSITIONS,
+        ),
     )
     return ValidationReport(
         seed=seed,
@@ -854,6 +862,86 @@ def _validate_trace_equivalence(seed: int) -> ValidationCheck:
             "plain_trace_events": len(plain.trace_events),
             "traced_events": list(traced.trace_events),
             "private_trace_fields": sorted(private_fields & trace_fields),
+        },
+    )
+
+
+def _validate_gymnasium_checker(seed: int) -> ValidationCheck:
+    environment = InvestigationEnv(n_services=10, initial_budget=8)
+    observation, _ = environment.reset(seed=seed)
+    all_actions_valid = bool(observation["action_mask"].all())
+    checker_error = None
+    try:
+        check_env(environment, skip_render_check=True)
+    except Exception as error:  # pragma: no cover - reported instead of hidden
+        checker_error = f"{type(error).__name__}: {error}"
+    return ValidationCheck(
+        "8.5 Gymnasium environment checker",
+        all_actions_valid and checker_error is None,
+        {
+            "gymnasium_version": gym.__version__,
+            "n_services": 10,
+            "valid_actions_at_reset": int(observation["action_mask"].sum()),
+            "all_actions_valid_at_reset": all_actions_valid,
+            "checker_error": checker_error,
+            "render_check_skipped": True,
+        },
+    )
+
+
+def _validate_mask_aware_gymnasium_rollout(
+    seed: int,
+    transition_count: int,
+) -> ValidationCheck:
+    environment = InvestigationEnv()
+    action_rng = np.random.default_rng(seed)
+    episode_rng = np.random.default_rng(seed + 1)
+    observation, _ = environment.reset(
+        seed=int(episode_rng.integers(0, np.iinfo(np.int32).max))
+    )
+    episodes = 1
+    resets_after_termination = 0
+    space_violations = 0
+    invalid_action_selections = 0
+    unexpected_truncations = 0
+
+    for transition_index in range(transition_count):
+        space_violations += int(
+            not environment.observation_space.contains(observation)
+        )
+        valid_actions = np.flatnonzero(observation["action_mask"])
+        action = int(action_rng.choice(valid_actions))
+        invalid_action_selections += int(
+            not bool(observation["action_mask"][action])
+        )
+        observation, _, terminated, truncated, _ = environment.step(action)
+        space_violations += int(
+            not environment.observation_space.contains(observation)
+        )
+        unexpected_truncations += int(truncated)
+        if terminated and transition_index + 1 < transition_count:
+            observation, _ = environment.reset(
+                seed=int(episode_rng.integers(0, np.iinfo(np.int32).max))
+            )
+            episodes += 1
+            resets_after_termination += 1
+
+    passed = (
+        space_violations == 0
+        and invalid_action_selections == 0
+        and unexpected_truncations == 0
+        and resets_after_termination == episodes - 1
+    )
+    return ValidationCheck(
+        "8.5 default mask-aware multi-step rollout",
+        passed,
+        {
+            "transitions": transition_count,
+            "episodes": episodes,
+            "resets_after_termination": resets_after_termination,
+            "observation_space_violations": space_violations,
+            "invalid_action_selections": invalid_action_selections,
+            "unexpected_truncations": unexpected_truncations,
         },
     )
 

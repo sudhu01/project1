@@ -14,13 +14,14 @@ def test_full_probability_and_inference_validation_passes() -> None:
     assert report.observation_samples_per_hypothesis == 10_000
     assert report.prior_samples == 60_000
     assert report.transition_samples == 10_000
-    assert len(report.checks) == 12
+    assert len(report.checks) == 14
     assert all(check.passed for check in report.checks)
     assert {check.name.split()[0] for check in report.checks} == {
         "8.1",
         "8.2",
         "8.3",
         "8.4",
+        "8.5",
     }
 
 

@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.4 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 8.5 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -118,3 +118,9 @@ label. The step 8.4 validator samples 10,000 valid transitions and checks masks,
 budgets, finite observations, padded actions, terminal payout protection, the
 last affordable probe, invalid-action atomicity, private-label isolation, and
 trace equivalence. The transition sample count cannot be set below 10,000.
+
+The step 8.5 gate runs Gymnasium 1.3.0's `check_env` against a ten-service
+environment with all 41 actions valid at reset. It skips only rendering because
+this environment has no render modes. A separate mask-aware rollout samples
+1,000 transitions from the default eight-service environment and resets after
+every true termination. State-dependent invalid-action checks remain enabled.
