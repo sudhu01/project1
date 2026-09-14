@@ -1,6 +1,7 @@
 # Local development environment
 
-Steps 3 through 8.5 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 8.5 and baseline steps 9.1 and 9.2 of the small simulator
+execution plan were completed on 2026-09-15.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -124,3 +125,16 @@ environment with all 41 actions valid at reset. It skips only rendering because
 this environment has no render modes. A separate mask-aware rollout samples
 1,000 transitions from the default eight-service environment and resets after
 every true termination. State-dependent invalid-action checks remain enabled.
+
+`rca_sim.baselines` implements immediate STOP, fixed-budget random acquisition,
+and a separate random-including-STOP smoke policy. Fixed-budget random policies
+sample uniformly from currently feasible probes and never include STOP before
+their declared limits of 1, 2, 4, or 6 probes. Each stochastic policy has an
+independent action seed and does not use the environment's incident RNG.
+
+`python -m rca_sim.evaluate` evaluates these policies on the same frozen cases.
+It writes one row per method, case, and action seed to `episodes.jsonl`, then
+writes method-level accuracy, return, credit, and probe summaries to
+`summary.json`. The default random evaluation uses five action seeds. The
+`random_stop` method remains separately named so it cannot be mistaken for the
+stronger fixed-budget random baseline.
