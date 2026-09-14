@@ -168,3 +168,25 @@ service-level topology columns in `node_features`, but it does not perform
 message passing with `adjacency` and must not be described as a GNN. The
 observation retains the adjacency matrix so a graph encoder can be compared
 later if pooled context loses information about shared dependencies.
+
+Step 11 implements the first PPO pilot. `configs/ppo_v0.yaml` contains the
+resolved CPU settings, including one PyTorch CPU thread, eight logical
+environments, 1,024 transitions per update, and 100 planned updates.
+`rca_sim.rollout.RolloutCollector` batches policy inference while stepping the
+environment objects in one process. Each disposable rollout keeps public
+observation snapshots, masks, semantic actions, old log probabilities, critic
+values, rewards, terminal flags, bootstrap values, and audit-only case IDs.
+
+The GAE implementation cuts recursion at true episode endings, bootstraps an
+unfinished incident at a rollout boundary, leaves value targets in reward
+units, and normalizes only advantages. `rca_sim.ppo.update_policy` applies the
+clipped PPO objective, fixed critic and entropy coefficients, gradient clipping,
+and a rollout-wide KL check after each epoch.
+
+Training checkpoints contain model and optimizer state, the resolved PPO
+configuration, transition count, Python/NumPy/PyTorch RNG states, observation
+schema, generator version, dependency lock hash, and exact collector state.
+Collector restoration regenerates each frozen incident, replays its probe
+history, and checks the rebuilt public observation. Resuming without collector
+state is explicitly labeled `non_identical_fresh_incidents`. Evaluation seed
+streams are separate from training RNG state.

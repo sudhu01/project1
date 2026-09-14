@@ -182,6 +182,58 @@ class InvestigationEnv(gym.Env[Observation, int]):
         """Return copies of public trace events in episode order."""
         return tuple(dict(event) for event in self._trace_events)
 
+    def checkpoint_state(self) -> dict[str, Any]:
+        """Return the replay data needed to restore one active incident exactly."""
+        world, _, _, observation = self._require_active_episode()
+        return {
+            "environment_config": {
+                "n_services": self._configured_n_services,
+                "initial_budget": self.initial_budget,
+                "max_probes": self.max_probes,
+                "lambda_cost": self.lambda_cost,
+                "extra_edge_probability": self.extra_edge_probability,
+            },
+            "world": {
+                "case_id": self._case_id,
+                "generator_version": world.generator_version,
+                "incident_seed": world.incident_seed,
+                "n_services": world.graph.n_services,
+                "extra_edge_probability": world.extra_edge_probability,
+            },
+            "executed_probe_actions": tuple(self._executed_probe_actions),
+            "observation": _copy_observation(observation),
+        }
+
+    def restore_checkpoint_state(self, state: Mapping[str, Any]) -> None:
+        """Replay a boundary checkpoint and verify the reconstructed public state."""
+        if not isinstance(state, Mapping):
+            raise TypeError("environment checkpoint state must be a mapping")
+        expected_config = {
+            "n_services": self._configured_n_services,
+            "initial_budget": self.initial_budget,
+            "max_probes": self.max_probes,
+            "lambda_cost": self.lambda_cost,
+            "extra_edge_probability": self.extra_edge_probability,
+        }
+        if state.get("environment_config") != expected_config:
+            raise ValueError("environment configuration does not match checkpoint")
+        world = state.get("world")
+        if not isinstance(world, Mapping):
+            raise ValueError("checkpoint world descriptor is missing")
+        observation, _ = self.reset(options={"case": dict(world)})
+        for action in state.get("executed_probe_actions", ()):
+            observation, _, terminated, truncated, _ = self.step(int(action))
+            if terminated or truncated:
+                raise ValueError("checkpoint action history ends in a closed episode")
+        expected_observation = state.get("observation")
+        if not isinstance(expected_observation, Mapping):
+            raise ValueError("checkpoint observation is missing")
+        if any(
+            not np.array_equal(observation[key], expected_observation[key])
+            for key in observation
+        ):
+            raise ValueError("replayed environment does not match checkpoint")
+
     def reset(
         self,
         *,
