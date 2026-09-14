@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 5.2 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 5.4 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -46,3 +46,14 @@ The action mapping assigns four probe indices to each of ten padded service
 slots. Probe indices are 0 through 39, and STOP is always index 40 in a
 41-action discrete space. Encoding and decoding preserve the semantic template
 instead of treating each slot as an unrelated action.
+
+The canonical action mask rejects padded services, unavailable tools,
+unaffordable probes, and probes whose complete coverage is already in the
+evidence ledger. STOP remains valid until termination. The simulator executor
+validates against this mask before reading the frozen world and returns an
+immutable, backend-neutral result with semantic action, evidence, cost, and
+coverage fields.
+
+`rca_sim.evidence.EvidenceLedger` deduplicates exact repeats by evidence ID.
+It rejects a conflicting value atomically, before adding any record from the
+batch.

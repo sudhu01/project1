@@ -15,12 +15,16 @@ from rca_sim.tools import (
     STOP_ACTION_INDEX,
     TEMPLATES_PER_SERVICE,
     ProbePreset,
+    ProbeResult,
+    ProbeStatus,
     ProbeTemplate,
     ProbeTool,
     collect_probe_evidence,
+    construct_action_mask,
     decode_probe_action,
     get_probe_template,
     is_stop_action,
+    execute_probe_action,
     probe_action_index,
 )
 from rca_sim.world import generate_incident_world
@@ -247,3 +251,136 @@ def test_action_decoding_rejects_indices_outside_discrete_space(
 ) -> None:
     with pytest.raises((TypeError, ValueError), match="action_index"):
         decode_probe_action(action_index)  # type: ignore[arg-type]
+
+
+def test_initial_action_mask_enables_active_probes_and_stop_only() -> None:
+    mask = construct_action_mask(
+        n_services=8,
+        remaining_credits=8,
+        seen_evidence_ids=(),
+    )
+
+    assert mask.dtype == np.bool_
+    assert mask.shape == (ACTION_SPACE_SIZE,)
+    assert mask[:32].all()
+    assert not mask[32:STOP_ACTION_INDEX].any()
+    assert mask[STOP_ACTION_INDEX]
+
+
+def test_action_mask_applies_cost_availability_and_coverage_rules() -> None:
+    metrics_detailed = PROBE_TEMPLATES["metrics.detailed"]
+    seen = metrics_detailed.evidence_ids(0)
+    available_tools = {
+        0: frozenset(ProbeTool),
+        1: frozenset({ProbeTool.METRICS}),
+    }
+
+    mask = construct_action_mask(
+        n_services=2,
+        remaining_credits=2,
+        seen_evidence_ids=seen,
+        available_tools=available_tools,
+    )
+
+    assert not mask[probe_action_index(0, "metrics.quick")]
+    assert not mask[probe_action_index(0, "metrics.detailed")]
+    assert mask[probe_action_index(0, "logs.quick")]
+    assert not mask[probe_action_index(0, "logs.detailed")]
+    assert mask[probe_action_index(1, "metrics.quick")]
+    assert mask[probe_action_index(1, "metrics.detailed")]
+    assert not mask[probe_action_index(1, "logs.quick")]
+    assert mask[STOP_ACTION_INDEX]
+
+
+def test_quick_then_detailed_keeps_only_unseen_coverage_actionable() -> None:
+    quick_ids = PROBE_TEMPLATES["metrics.quick"].evidence_ids(3)
+
+    mask = construct_action_mask(
+        n_services=8,
+        remaining_credits=2,
+        seen_evidence_ids=quick_ids,
+    )
+
+    assert not mask[probe_action_index(3, "metrics.quick")]
+    assert mask[probe_action_index(3, "metrics.detailed")]
+
+
+def test_terminated_action_mask_has_no_valid_actions() -> None:
+    mask = construct_action_mask(
+        n_services=8,
+        remaining_credits=8,
+        seen_evidence_ids=(),
+        terminated=True,
+    )
+
+    assert not mask.any()
+
+
+@pytest.mark.parametrize(
+    "action_index",
+    [
+        probe_action_index(8, "metrics.quick"),
+        probe_action_index(0, "logs.detailed"),
+    ],
+)
+def test_executor_rejects_invalid_action_before_reading_world(
+    action_index: int,
+) -> None:
+    world = generate_incident_world(n_services=8, incident_seed=108)
+
+    with pytest.raises(ValueError, match="invalid"):
+        execute_probe_action(
+            world,
+            action_index,
+            remaining_credits=1,
+            seen_evidence_ids=(),
+        )
+
+
+def test_executor_returns_backend_neutral_result() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=109)
+    action_index = probe_action_index(3, "metrics.quick")
+
+    result = execute_probe_action(
+        world,
+        action_index,
+        remaining_credits=8,
+        seen_evidence_ids=(),
+    )
+    payload = result.as_dict()
+
+    assert isinstance(result, ProbeResult)
+    assert result.status is ProbeStatus.OK
+    assert payload["action"] == {
+        "tool": "metrics",
+        "target_id": "service-3",
+        "preset": "quick",
+    }
+    assert payload["status"] == "ok"
+    assert payload["cost"] == {"credits": 1}
+    assert payload["coverage"] == {"complete": True}
+    assert [item["id"] for item in payload["evidence"]] == [
+        "metrics/service-3/cpu/0",
+        "metrics/service-3/memory/0",
+        "metrics/service-3/latency/0",
+    ]
+    assert all(item["value"] in (0, 1) for item in payload["evidence"])
+
+
+def test_executor_masks_exact_repeat_and_does_not_charge_or_mutate() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=110)
+    action_index = probe_action_index(2, "logs.quick")
+    seen = PROBE_TEMPLATES["logs.quick"].evidence_ids(2)
+
+    with pytest.raises(ValueError, match="invalid"):
+        execute_probe_action(
+            world,
+            action_index,
+            remaining_credits=8,
+            seen_evidence_ids=seen,
+        )
+
+    assert world.evidence_ids == generate_incident_world(
+        n_services=8,
+        incident_seed=110,
+    ).evidence_ids
