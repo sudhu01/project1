@@ -20,6 +20,14 @@ def _assert_observations_equal(
         np.testing.assert_array_equal(left[key], right[key])
 
 
+def _world_with_initial_diagnosis(*, correct: bool):
+    for incident_seed in range(100):
+        world = generate_incident_world(n_services=8, incident_seed=incident_seed)
+        if (world.hypothesis.cause_service == 0) is correct:
+            return world
+    raise AssertionError("could not find a suitable deterministic incident")
+
+
 def test_reset_initializes_the_declared_episode_state_and_public_info() -> None:
     env = InvestigationEnv()
 
@@ -29,6 +37,7 @@ def test_reset_initializes_the_declared_episode_state_and_public_info() -> None:
     assert env.action_space.n == 41
     assert env.remaining_credits == 8
     assert env.probes_taken == 0
+    assert env.episode_return == 0.0
     assert env.evidence_records == ()
     assert env.executed_probe_actions == ()
     assert env.last_pre_action_observation is None
@@ -285,15 +294,96 @@ def test_step_requires_reset_and_rejects_steps_after_auto_termination() -> None:
         env.step(0)
 
 
-def test_stop_transition_is_left_for_step_7_4_without_mutating_state() -> None:
+@pytest.mark.parametrize(("correct", "expected_reward"), [(True, 1.0), (False, 0.0)])
+def test_immediate_stop_scores_current_service_diagnosis_without_cost(
+    correct: bool,
+    expected_reward: float,
+) -> None:
     env = InvestigationEnv()
-    before, _ = env.reset(seed=66)
+    before, _ = env.reset(
+        options={"case": _world_with_initial_diagnosis(correct=correct)}
+    )
 
-    with pytest.raises(NotImplementedError, match="7.4"):
-        env.step(40)
+    after, reward, terminated, truncated, info = env.step(40)
 
+    assert terminated
+    assert not truncated
+    assert reward == expected_reward
+    assert env.episode_return == expected_reward
+    assert env.termination_reason == "stop"
     assert env.probes_taken == 0
     assert env.remaining_credits == 8
-    assert env.last_pre_action_observation is None
-    replayed, _ = env.reset(seed=66)
-    _assert_observations_equal(before, replayed)
+    assert env.evidence_records == ()
+    assert env.executed_probe_actions == ()
+    assert info["action_type"] == "stop"
+    assert info["step_cost"] == 0
+    assert info["new_evidence_ids"] == ()
+    assert info["diagnosis_correct"] is correct
+    assert info["termination_reason"] == "stop"
+    assert not after["action_mask"].any()
+    saved = env.last_pre_action_observation
+    assert saved is not None
+    _assert_observations_equal(saved, before)
+
+
+def test_episode_return_is_terminal_utility_minus_total_credit_cost() -> None:
+    env = InvestigationEnv()
+    env.reset(seed=67)
+
+    _, quick_reward, quick_done, _, quick_info = env.step(
+        probe_action_index(1, "metrics.quick")
+    )
+    _, detailed_reward, detailed_done, _, detailed_info = env.step(
+        probe_action_index(1, "metrics.detailed")
+    )
+    _, stop_reward, stop_done, _, stop_info = env.step(40)
+
+    assert quick_reward == pytest.approx(-0.05)
+    assert detailed_reward == pytest.approx(-0.10)
+    assert quick_info["diagnosis_correct"] is None
+    assert detailed_info["diagnosis_correct"] is None
+    assert not quick_done
+    assert not detailed_done
+    assert stop_done
+    expected = float(stop_info["diagnosis_correct"]) - 0.05 * 3
+    assert quick_reward + detailed_reward + stop_reward == pytest.approx(expected)
+    assert env.episode_return == pytest.approx(expected)
+    assert stop_info["episode_return"] == pytest.approx(expected)
+    assert -0.40 <= env.episode_return <= 1.0
+
+
+def test_full_budget_episode_return_reaches_documented_default_bounds() -> None:
+    env = InvestigationEnv()
+    env.reset(seed=68)
+
+    rewards = [env.step(probe_action_index(0, "logs.detailed"))[1]]
+    rewards.append(env.step(probe_action_index(1, "metrics.detailed"))[1])
+    _, final_reward, terminated, _, info = env.step(
+        probe_action_index(1, "logs.quick")
+    )
+    rewards.append(final_reward)
+
+    assert terminated
+    assert info["termination_reason"] == "budget"
+    assert info["credits_spent"] == 8
+    expected = float(info["diagnosis_correct"]) - 0.40
+    assert sum(rewards) == pytest.approx(expected)
+    assert env.episode_return == pytest.approx(expected)
+    assert env.episode_return == pytest.approx(
+        -0.40
+    ) or env.episode_return == pytest.approx(0.60)
+
+
+def test_correct_current_prediction_does_not_end_a_probe_transition() -> None:
+    world = _world_with_initial_diagnosis(correct=True)
+    env = InvestigationEnv()
+    env.reset(options={"case": world})
+
+    _, reward, terminated, _, info = env.step(
+        probe_action_index(0, "metrics.quick")
+    )
+
+    assert not terminated
+    assert reward == pytest.approx(-0.05)
+    assert info["diagnosis_correct"] is None
+    assert info["termination_reason"] is None

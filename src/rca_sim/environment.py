@@ -45,15 +45,11 @@ DEFAULT_EXTRA_EDGE_PROBABILITY = 0.15
 TERMINATION_BUDGET = "budget"
 TERMINATION_HORIZON = "horizon"
 TERMINATION_NO_PROBE = "no_probe_available"
+TERMINATION_STOP = "stop"
 
 
 class InvestigationEnv(gym.Env[Observation, int]):
-    """Small exact RCA simulator through reset and probe transitions.
-
-    STOP is part of the declared action space, but its transition belongs to
-    execution-plan step 7.4. Calling it before that step is implemented raises
-    ``NotImplementedError`` rather than silently giving it probe semantics.
-    """
+    """Small exact RCA simulator with explicit probe and STOP transitions."""
 
     metadata = {"render_modes": []}
 
@@ -106,6 +102,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
         self._probes_taken = 0
         self._terminated = False
         self._termination_reason: str | None = None
+        self._episode_return = 0.0
         self._case_id: str | None = None
 
     @property
@@ -123,6 +120,10 @@ class InvestigationEnv(gym.Env[Observation, int]):
     @property
     def termination_reason(self) -> str | None:
         return self._termination_reason
+
+    @property
+    def episode_return(self) -> float:
+        return self._episode_return
 
     @property
     def evidence_records(self) -> tuple[EvidenceRecord, ...]:
@@ -181,6 +182,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
         self._probes_taken = 0
         self._terminated = False
         self._termination_reason = None
+        self._episode_return = 0.0
         self._last_pre_action_observation = None
         self._case_id = case_id
         self._observation = self._build_observation()
@@ -191,13 +193,11 @@ class InvestigationEnv(gym.Env[Observation, int]):
         self,
         action: int,
     ) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
-        """Execute one valid evidence-revealing probe."""
+        """Execute one probe or stop and score the current diagnosis."""
         world, ledger, belief, observation = self._require_active_episode()
         action_index = _action_index(action)
         if is_stop_action(action_index):
-            raise NotImplementedError(
-                "STOP transitions are defined by execution-plan step 7.4"
-            )
+            return self._step_stop(observation=observation)
         if not bool(observation["action_mask"][action_index]):
             raise ValueError(f"action {action_index} is invalid for the current state")
 
@@ -219,25 +219,22 @@ class InvestigationEnv(gym.Env[Observation, int]):
 
         self._termination_reason = self._probe_termination_reason()
         self._terminated = self._termination_reason is not None
-        terminal_utility = 0.0
-        diagnosis_correct: bool | None = None
-        if self._terminated:
-            diagnosis_correct = (
-                belief.predicted_service == world.hypothesis.cause_service
-            )
-            terminal_utility = float(diagnosis_correct)
-
-        reward = -self.lambda_cost * result.cost.credits + terminal_utility
+        reward, diagnosis_correct = self._score_transition(
+            step_cost=result.cost.credits,
+            terminal=self._terminated,
+        )
         self._observation = self._build_observation()
         info = self._public_info()
         info.update(
             {
+                "action_type": "probe",
                 "probe": result.as_dict(),
                 "new_evidence_ids": tuple(
                     record.evidence_id for record in unseen_records
                 ),
                 "step_cost": result.cost.credits,
                 "diagnosis_correct": diagnosis_correct,
+                "episode_return": self._episode_return,
             }
         )
         return (
@@ -247,6 +244,68 @@ class InvestigationEnv(gym.Env[Observation, int]):
             False,
             info,
         )
+
+    def _step_stop(
+        self,
+        *,
+        observation: Observation,
+    ) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
+        self._last_pre_action_observation = _copy_observation(observation)
+        self._termination_reason = TERMINATION_STOP
+        self._terminated = True
+        reward, diagnosis_correct = self._score_transition(
+            step_cost=0,
+            terminal=True,
+        )
+        self._observation = self._build_observation()
+        info = self._public_info()
+        info.update(
+            {
+                "action_type": "stop",
+                "new_evidence_ids": (),
+                "step_cost": 0,
+                "diagnosis_correct": diagnosis_correct,
+                "episode_return": self._episode_return,
+            }
+        )
+        return (
+            _copy_observation(self._observation),
+            float(reward),
+            True,
+            False,
+            info,
+        )
+
+    def _score_transition(
+        self,
+        *,
+        step_cost: int,
+        terminal: bool,
+    ) -> tuple[float, bool | None]:
+        world, _, belief, _ = self._require_initialized_episode(
+            require_observation=False
+        )
+        diagnosis_correct = None
+        terminal_utility = 0.0
+        if terminal:
+            diagnosis_correct = (
+                belief.predicted_service == world.hypothesis.cause_service
+            )
+            terminal_utility = float(diagnosis_correct)
+        reward = -self.lambda_cost * step_cost + terminal_utility
+        self._episode_return += reward
+        if terminal:
+            expected_return = (
+                terminal_utility
+                - self.lambda_cost
+                * (self.initial_budget - self._remaining_credits)
+            )
+            if not np.isclose(self._episode_return, expected_return, atol=1e-12):
+                raise RuntimeError("episode reward accounting is inconsistent")
+            lower_bound = -self.lambda_cost * self.initial_budget
+            if not lower_bound - 1e-12 <= self._episode_return <= 1.0 + 1e-12:
+                raise RuntimeError("episode return is outside configured bounds")
+        return float(reward), diagnosis_correct
 
     def _probe_termination_reason(self) -> str | None:
         if self._remaining_credits == 0:

@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 7.3 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 7.4 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -85,4 +85,6 @@ reset and probe transitions. Reset creates an independent frozen incident or
 loads an exact case descriptor, then clears evidence, belief, budget, and
 history state. Probe steps save the prior observation, charge the template
 cost, update belief from unseen evidence, and auto-finalize on budget, horizon,
-or lack of another feasible probe. STOP remains reserved for plan step 7.4.
+or lack of another feasible probe. STOP ends immediately at zero cost and
+scores the current service diagnosis. Every episode return is terminal
+correctness minus `lambda_cost` times total credits spent.
