@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 7.5 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 8.2 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -95,3 +95,10 @@ step until reset so an incident cannot be scored twice. Collectors can copy
 the live observation at a batch cutoff without changing episode state, then
 bootstrap from it and continue the same incident in the next batch. External
 Gymnasium wrappers may still report their own truncation separately.
+
+`python -m rca_sim.validate` runs the step 8.1 and 8.2 checks with fixed seeds.
+It checks every probability table, distance decay, 10,000 observation samples
+for each selected fixed hypothesis, and independent prior sampling. It also
+checks posterior normalization, reference agreement, evidence order, scope
+upgrades, duplicate reads, and shared-workload marginalization. Pass `--output`
+to save the JSON report used as the validation artifact.
