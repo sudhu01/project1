@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 7.1 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 7.3 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -79,3 +79,10 @@ space and its fixed 42 node and 10 global feature columns. The builder uses
 only acquired evidence, inferred beliefs, public graph data, resource state,
 and executed probe history. It returns fresh padded arrays and rejects values
 outside the declared schema bounds instead of clipping them.
+
+`rca_sim.environment.InvestigationEnv` implements reproducible Gymnasium
+reset and probe transitions. Reset creates an independent frozen incident or
+loads an exact case descriptor, then clears evidence, belief, budget, and
+history state. Probe steps save the prior observation, charge the template
+cost, update belief from unseen evidence, and auto-finalize on budget, horizon,
+or lack of another feasible probe. STOP remains reserved for plan step 7.4.
