@@ -267,6 +267,58 @@ def test_all_impossible_evidence_raises_without_changing_state(
     assert estimator.evidence_ids == ()
 
 
+def test_hand_checkable_two_hypothesis_updates_and_duplicate_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    estimator = ExactBeliefEstimator(_graph())
+    first_record = MetricEvidenceRecord(
+        0,
+        MetricCategory.CPU_HIGH,
+        0,
+        True,
+    )
+    second_record = MetricEvidenceRecord(
+        0,
+        MetricCategory.CPU_HIGH,
+        1,
+        True,
+    )
+    hypothesis_a = (0, FaultType.CPU, Workload.NORMAL)
+    hypothesis_b = (1, FaultType.MEMORY, Workload.BUSY)
+    first_likelihoods = np.zeros((2, 3, 2), dtype=np.float64)
+    first_likelihoods[hypothesis_a] = 0.8
+    first_likelihoods[hypothesis_b] = 0.2
+    second_likelihoods = np.zeros((2, 3, 2), dtype=np.float64)
+    second_likelihoods[hypothesis_a] = 0.25
+    second_likelihoods[hypothesis_b] = 0.75
+
+    def fixture_likelihoods(
+        graph: DependencyGraph,
+        record: MetricEvidenceRecord | LogEvidenceRecord,
+    ) -> np.ndarray:
+        del graph
+        if record.evidence_id == first_record.evidence_id:
+            return first_likelihoods
+        return second_likelihoods
+
+    monkeypatch.setattr(belief_module, "_record_likelihoods", fixture_likelihoods)
+
+    estimator.update([first_record])
+
+    assert estimator.posterior[hypothesis_a] == pytest.approx(0.8)
+    assert estimator.posterior[hypothesis_b] == pytest.approx(0.2)
+
+    estimator.update([second_record])
+
+    expected_after_both = estimator.posterior
+    assert expected_after_both[hypothesis_a] == pytest.approx(4.0 / 7.0)
+    assert expected_after_both[hypothesis_b] == pytest.approx(3.0 / 7.0)
+    assert np.count_nonzero(expected_after_both) == 2
+
+    assert estimator.update([first_record, second_record]) == ()
+    np.testing.assert_array_equal(estimator.posterior, expected_after_both)
+
+
 def test_conflicting_or_invalid_batch_is_atomic() -> None:
     estimator = ExactBeliefEstimator(_graph())
     original = MetricEvidenceRecord(0, MetricCategory.CPU_HIGH, 0, True)

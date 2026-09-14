@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 6.3 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 6.4 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -68,3 +68,8 @@ The separate reference path recomputes from the uniform prior and the complete
 deduplicated ledger. The estimator exposes immutable service/fault, service,
 and busy-workload marginals. Diagnosis ties use the lowest service ID and then
 the lowest fault encoding.
+
+The hand-checkable two-hypothesis test starts from equal prior mass. Evidence
+with likelihoods 0.8 and 0.2 produces that same posterior split. A second
+record with likelihoods 0.25 and 0.75 changes the split to 4/7 and 3/7.
+Reading either record again leaves the posterior unchanged.
