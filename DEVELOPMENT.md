@@ -160,3 +160,11 @@ The `full_information` evaluator reference passes every frozen incident record
 to a fresh exact estimator. It reports diagnosis accuracy, confidence, evidence
 count, and inference time. Its return, credits, and probe counts are null because
 the reference removes acquisition limits and is not a feasible policy.
+
+`rca_sim.model.SmallPolicyNetwork` is the first small policy MLP. It shares one
+service encoder and one scorer across every service/template action, then uses
+masked mean and maximum pooling for the STOP and critic context. It reads the
+service-level topology columns in `node_features`, but it does not perform
+message passing with `adjacency` and must not be described as a GNN. The
+observation retains the adjacency matrix so a graph encoder can be compared
+later if pooled context loses information about shared dependencies.
