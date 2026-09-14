@@ -29,6 +29,7 @@ def test_immediate_stop_never_acquires_evidence() -> None:
         include_random=False,
         include_random_smoke=False,
         include_script=False,
+        include_voi1=False,
     )
 
     assert len(rows) == 4
@@ -49,6 +50,7 @@ def test_random_acquisition_excludes_stop_until_probe_budget(probe_budget: int) 
         include_stop=False,
         include_random_smoke=False,
         include_script=False,
+        include_voi1=False,
     )
     row = rows[0]
 
@@ -69,6 +71,7 @@ def test_random_policy_replays_with_same_action_seed_on_same_cases() -> None:
         include_stop=False,
         include_random_smoke=False,
         include_script=False,
+        include_voi1=False,
     )
 
     first = evaluate_baselines(_cases(), **settings)
@@ -85,6 +88,7 @@ def test_random_action_seed_does_not_change_incident_cases() -> None:
         include_stop=False,
         include_random_smoke=False,
         include_script=False,
+        include_voi1=False,
     )
 
     by_case = {}
@@ -117,6 +121,7 @@ def test_aggregate_results_keeps_random_variants_separate() -> None:
         action_seeds=(4, 5),
         include_random_smoke=False,
         include_script=False,
+        include_voi1=False,
     )
 
     summary = {row.method: row for row in aggregate_results(rows)}
@@ -227,6 +232,7 @@ def test_script_threshold_variants_are_evaluated_without_action_seeds() -> None:
         include_stop=False,
         include_random=False,
         include_random_smoke=False,
+        include_voi1=False,
     )
 
     assert len(rows) == 8

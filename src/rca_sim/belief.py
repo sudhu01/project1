@@ -197,6 +197,17 @@ def recompute_posterior(
     return _immutable_copy(_normalize_log_weights(log_weights))
 
 
+def record_likelihoods(
+    graph: DependencyGraph,
+    record: EvidenceRecord,
+) -> FloatArray:
+    """Return one public record likelihood for every supported hypothesis."""
+    if not isinstance(graph, DependencyGraph):
+        raise TypeError("graph must be a DependencyGraph")
+    _validate_record(record, graph.n_services)
+    return _record_likelihoods(graph, record)
+
+
 def _record_likelihoods(
     graph: DependencyGraph,
     record: EvidenceRecord,

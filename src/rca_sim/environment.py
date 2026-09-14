@@ -34,6 +34,7 @@ from rca_sim.world import (
     HiddenIncidentWorld,
     generate_incident_world,
 )
+from rca_sim.graph import DependencyGraph
 
 
 DEFAULT_SERVICES = 8
@@ -146,6 +147,20 @@ class InvestigationEnv(gym.Env[Observation, int]):
     def evidence_records(self) -> tuple[EvidenceRecord, ...]:
         """Return the acquired public evidence in first-seen order."""
         return () if self._ledger is None else self._ledger.records
+
+    @property
+    def public_graph(self) -> DependencyGraph:
+        """Return the immutable public dependency graph for exact planning."""
+        if self._world is None:
+            raise RuntimeError("call reset before reading the public graph")
+        return self._world.graph
+
+    @property
+    def belief_posterior(self) -> np.ndarray:
+        """Return the inferred public posterior without hidden incident data."""
+        if self._belief is None:
+            raise RuntimeError("call reset before reading the belief posterior")
+        return self._belief.posterior
 
     @property
     def executed_probe_actions(self) -> tuple[int, ...]:

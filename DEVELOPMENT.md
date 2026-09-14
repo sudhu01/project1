@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.5 and baseline steps 9.1 through 9.3 of the small simulator
+Steps 3 through 8.5 and baseline steps 9.1 through 9.5 of the small simulator
 execution plan were completed on 2026-09-15.
 
 - Python: CPython 3.12.13, 64-bit
@@ -144,3 +144,14 @@ then visits dependencies in breadth-first order, with ascending public service
 ID as the tie-breaker. After the first probe, it stops when the largest service
 belief reaches its configured confidence threshold. Evaluation expands the
 planned thresholds 0.60, 0.75, 0.90, and 0.99 into separate named methods.
+
+`rca_sim.oracle.one_step_plan` computes exact one-step value of information from
+the public graph, full inferred posterior, acquired evidence IDs, action mask,
+and configured cost weight. It enumerates only unseen records. STOP wins every
+value tie. The `voi1` evaluator method records policy computation time in a
+separate field rather than treating it as synthetic probe cost.
+
+The finite fixture planner now memoizes posterior, evidence, budget, and horizon
+states during recursive search. `FixtureEnv.optimal_value` exposes its exact
+finite-horizon reference value, while `planner_cache_entries` and
+`planner_cache_hits` report the last search's memoization statistics.

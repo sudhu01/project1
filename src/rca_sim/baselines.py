@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from numbers import Integral
-from numbers import Real
+from numbers import Integral, Real
 from typing import Protocol
 
 import numpy as np
 
+from rca_sim.environment import InvestigationEnv
 from rca_sim.observation import (
     GLOBAL_FEATURE_NAMES,
     NODE_FEATURE_NAMES,
     OBSERVATION_SHAPES,
     Observation,
 )
+from rca_sim.oracle import OneStepPlan, one_step_plan
 from rca_sim.tools import (
     ACTION_SPACE_SIZE,
     STOP_ACTION_INDEX,
@@ -190,6 +191,42 @@ class ScriptedInvestigatorPolicy:
             if not quick_executed[service_id] and mask[action]:
                 return action
         return STOP_ACTION_INDEX
+
+
+@dataclass(slots=True)
+class OneStepValueOfInformationPolicy:
+    """Choose the exact best one-step probe, with STOP winning value ties."""
+
+    environment: InvestigationEnv
+    last_plan: OneStepPlan | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.environment, InvestigationEnv):
+            raise TypeError("environment must be an InvestigationEnv")
+
+    @property
+    def name(self) -> str:
+        return "voi1"
+
+    @property
+    def action_seed(self) -> None:
+        return None
+
+    def reset(self) -> None:
+        self.last_plan = None
+
+    def select_action(self, observation: Observation) -> int:
+        mask = _valid_action_mask(observation)
+        self.last_plan = one_step_plan(
+            graph=self.environment.public_graph,
+            posterior=self.environment.belief_posterior,
+            seen_evidence_ids=tuple(
+                record.evidence_id for record in self.environment.evidence_records
+            ),
+            action_mask=mask,
+            lambda_cost=self.environment.lambda_cost,
+        )
+        return self.last_plan.best_action
 
 
 def _valid_action_mask(observation: Observation) -> np.ndarray:

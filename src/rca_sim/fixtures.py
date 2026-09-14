@@ -317,6 +317,8 @@ class FixtureEnv(gym.Env[Observation, int]):
         self._terminated = False
         self._episode_return = 0.0
         self._observation: Observation | None = None
+        self._planner_cache_entries = 0
+        self._planner_cache_hits = 0
 
     @property
     def remaining_credits(self) -> int:
@@ -335,6 +337,16 @@ class FixtureEnv(gym.Env[Observation, int]):
     @property
     def episode_return(self) -> float:
         return self._episode_return
+
+    @property
+    def planner_cache_entries(self) -> int:
+        """Return the number of states memoized by the last planning call."""
+        return self._planner_cache_entries
+
+    @property
+    def planner_cache_hits(self) -> int:
+        """Return memoized-state hits from the last planning call."""
+        return self._planner_cache_hits
 
     def reset(
         self,
@@ -374,6 +386,8 @@ class FixtureEnv(gym.Env[Observation, int]):
         self._action_costs = []
         self._terminated = False
         self._episode_return = 0.0
+        self._planner_cache_entries = 0
+        self._planner_cache_hits = 0
         initial_records = self._records_for(self.definition.initial_evidence_ids)
         self._belief.update(self._ledger.add(initial_records))
         self._observation = self._build_observation()
@@ -439,13 +453,22 @@ class FixtureEnv(gym.Env[Observation, int]):
         if self._belief is None or self._ledger is None or self._terminated:
             raise RuntimeError("decision values require an active fixture episode")
         lookahead = _positive_integer(lookahead, "lookahead")
-        return self._decision_values(
+        cache: dict[
+            tuple[bytes, frozenset[str], int, int, int],
+            dict[int, float],
+        ] = {}
+        self._planner_cache_entries = 0
+        self._planner_cache_hits = 0
+        values = self._decision_values(
             self._belief.posterior,
             frozenset(self._ledger.evidence_ids),
             self._remaining_credits,
             self.max_probes - self._probes_taken,
             lookahead,
+            cache,
         )
+        self._planner_cache_entries = len(cache)
+        return values
 
     def optimal_action(self, *, lookahead: int = 1) -> int:
         """Choose the exact best action, favoring STOP on a value tie."""
@@ -457,6 +480,10 @@ class FixtureEnv(gym.Env[Observation, int]):
                 best_action = action
                 best_value = values[action]
         return best_action
+
+    def optimal_value(self, *, lookahead: int = 1) -> float:
+        """Return the exact finite-horizon value of the current fixture state."""
+        return max(self.decision_values(lookahead=lookahead).values())
 
     def collect_action(self, action: int) -> tuple[EvidenceRecord, ...]:
         """Read the fixture backend without changing the ledger or belief."""
@@ -474,7 +501,23 @@ class FixtureEnv(gym.Env[Observation, int]):
         remaining_credits: int,
         probes_left: int,
         lookahead: int,
+        cache: dict[
+            tuple[bytes, frozenset[str], int, int, int],
+            dict[int, float],
+        ],
     ) -> dict[int, float]:
+        key = (
+            np.asarray(weights, dtype=np.float64).tobytes(),
+            seen,
+            remaining_credits,
+            probes_left,
+            lookahead,
+        )
+        cached = cache.get(key)
+        if cached is not None:
+            self._planner_cache_hits += 1
+            return dict(cached)
+
         stop_value = float(self._cause_probabilities(weights).max())
         values = {STOP_ACTION_INDEX: stop_value}
         feasible = self._feasible_probes(seen, remaining_credits, probes_left)
@@ -501,12 +544,14 @@ class FixtureEnv(gym.Env[Observation, int]):
                             next_budget,
                             next_probes,
                             lookahead - 1,
+                            cache,
                         ).values()
                     )
                 expected_after += probability * continuation
             values[probe.action_index] = (
                 expected_after - self.lambda_cost * probe.cost_credits
             )
+        cache[key] = dict(values)
         return values
 
     def _outcomes(

@@ -6,8 +6,9 @@ import argparse
 import json
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -16,6 +17,7 @@ import yaml
 from rca_sim.baselines import (
     BaselinePolicy,
     ImmediateStopPolicy,
+    OneStepValueOfInformationPolicy,
     RandomAcquisitionPolicy,
     RandomIncludingStopPolicy,
     ScriptedInvestigatorPolicy,
@@ -47,6 +49,7 @@ class EvaluationRow:
     predicted_fault: str
     termination_reason: str
     actions: tuple[int, ...]
+    planning_seconds: float = field(compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +64,7 @@ class AggregateRow:
     mean_return: float
     mean_credits_spent: float
     mean_probes_taken: float
+    mean_planning_seconds: float
 
 
 def evaluate_episode(
@@ -75,9 +79,12 @@ def evaluate_episode(
     policy.reset()
     actions: list[int] = []
     terminal_info: dict[str, Any] | None = None
+    planning_seconds = 0.0
 
     while not environment.terminated:
+        started = perf_counter()
         action = policy.select_action(observation)
+        planning_seconds += perf_counter() - started
         actions.append(action)
         observation, _, terminated, truncated, info = environment.step(action)
         if truncated:
@@ -101,6 +108,7 @@ def evaluate_episode(
         predicted_fault=str(terminal_info["predicted_fault"]),
         termination_reason=str(terminal_info["termination_reason"]),
         actions=tuple(actions),
+        planning_seconds=planning_seconds,
     )
 
 
@@ -114,6 +122,7 @@ def evaluate_baselines(
     include_random: bool = True,
     include_random_smoke: bool = True,
     include_script: bool = True,
+    include_voi1: bool = True,
     environment_factory: EnvironmentFactory = InvestigationEnv,
 ) -> tuple[EvaluationRow, ...]:
     """Evaluate baseline variants while reusing every case across methods."""
@@ -125,28 +134,39 @@ def evaluate_baselines(
     if (include_random or include_random_smoke) and not seeds:
         raise ValueError("stochastic baselines require at least one action seed")
 
-    policies: list[BaselinePolicy] = []
+    policy_factories: list[Callable[[InvestigationEnv], BaselinePolicy]] = []
     if include_stop:
-        policies.append(ImmediateStopPolicy())
+        policy_factories.append(lambda environment: ImmediateStopPolicy())
     if include_random:
-        policies.extend(
-            RandomAcquisitionPolicy(probe_budget=budget, seed=seed)
+        policy_factories.extend(
+            lambda environment, budget=budget, seed=seed: RandomAcquisitionPolicy(
+                probe_budget=budget,
+                seed=seed,
+            )
             for budget in budgets
             for seed in seeds
         )
     if include_random_smoke:
-        policies.extend(RandomIncludingStopPolicy(seed=seed) for seed in seeds)
+        policy_factories.extend(
+            lambda environment, seed=seed: RandomIncludingStopPolicy(seed=seed)
+            for seed in seeds
+        )
     if include_script:
-        policies.extend(
-            ScriptedInvestigatorPolicy(confidence_threshold=threshold)
+        policy_factories.extend(
+            lambda environment, threshold=threshold: ScriptedInvestigatorPolicy(
+                confidence_threshold=threshold
+            )
             for threshold in _unique_thresholds(script_thresholds)
         )
-    if not policies:
+    if include_voi1:
+        policy_factories.append(OneStepValueOfInformationPolicy)
+    if not policy_factories:
         raise ValueError("at least one baseline method must be enabled")
 
     rows: list[EvaluationRow] = []
-    for policy in policies:
+    for policy_factory in policy_factories:
         environment = environment_factory()
+        policy = policy_factory(environment)
         try:
             for case_index, case in enumerate(frozen_cases):
                 rows.append(
@@ -194,6 +214,9 @@ def aggregate_results(rows: Iterable[EvaluationRow]) -> tuple[AggregateRow, ...]
                 ),
                 mean_probes_taken=float(
                     np.mean([row.probes_taken for row in method_rows])
+                ),
+                mean_planning_seconds=float(
+                    np.mean([row.planning_seconds for row in method_rows])
                 ),
             )
         )
@@ -283,8 +306,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--methods",
         nargs="+",
-        choices=("stop", "random", "random_stop", "script"),
-        default=("stop", "random", "random_stop", "script"),
+        choices=("stop", "random", "random_stop", "script", "voi1"),
+        default=("stop", "random", "random_stop", "script", "voi1"),
     )
     parser.add_argument(
         "--probe-budgets", nargs="+", type=int, default=DEFAULT_PROBE_BUDGETS
@@ -314,6 +337,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         include_random="random" in methods,
         include_random_smoke="random_stop" in methods,
         include_script="script" in methods,
+        include_voi1="voi1" in methods,
         environment_factory=_environment_factory_from_config(args.config),
     )
     summaries = aggregate_results(rows)
