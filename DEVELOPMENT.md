@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 6.4 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 7.1 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -73,3 +73,9 @@ The hand-checkable two-hypothesis test starts from equal prior mass. Evidence
 with likelihoods 0.8 and 0.2 produces that same posterior split. A second
 record with likelihoods 0.25 and 0.75 changes the split to 4/7 and 3/7.
 Reading either record again leaves the posterior unchanged.
+
+`rca_sim.observation` declares the versioned `sim_v0` Gymnasium dictionary
+space and its fixed 42 node and 10 global feature columns. The builder uses
+only acquired evidence, inferred beliefs, public graph data, resource state,
+and executed probe history. It returns fresh padded arrays and rejects values
+outside the declared schema bounds instead of clipping them.
