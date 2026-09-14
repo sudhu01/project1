@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.2 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 8.3 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -102,3 +102,12 @@ for each selected fixed hypothesis, and independent prior sampling. It also
 checks posterior normalization, reference agreement, evidence order, scope
 upgrades, duplicate reads, and shared-workload marginalization. Pass `--output`
 to save the JSON report used as the validation artifact.
+
+`rca_sim.fixtures` defines nine finite decision fixtures. Each fixture lists its
+valid latent hypotheses, prior, binary evidence likelihoods, enabled actions,
+coverage, costs, and optional public initial evidence. `FixtureEnv` uses the
+same padded `sim_v0` observation and 41-action schemas as the main environment.
+Its exact finite-state planner reports one-step or multi-step action values and
+favors STOP on ties. The step 8.3 validation checks all required decisions,
+including the two-bit complementarity case where depth one stops and depth two
+investigates.

@@ -158,6 +158,7 @@ def build_observation(
     probes_taken: int,
     max_probes: int,
     lambda_cost: float,
+    executed_probe_costs: Iterable[int] | None = None,
     available_tools: Mapping[int, Collection[ProbeTool]] | None = None,
     terminated: bool = False,
 ) -> Observation:
@@ -178,6 +179,7 @@ def build_observation(
         executed_probe_actions,
         graph.n_services,
     )
+    action_costs = _validate_action_costs(executed_probe_costs, action_history)
     initial_budget = _positive_integer(initial_budget, "initial_budget")
     remaining_credits = _nonnegative_integer(
         remaining_credits,
@@ -225,10 +227,14 @@ def build_observation(
         dtype=np.float32,
     )
     credits_spent = np.zeros(graph.n_services, dtype=np.float32)
-    for service_id, template in action_history:
+    for (service_id, template), action_cost in zip(
+        action_history,
+        action_costs,
+        strict=True,
+    ):
         template_index = PROBE_TEMPLATE_NAMES.index(template.name)
         executed_flags[service_id, template_index] = 1.0
-        credits_spent[service_id] += template.cost_credits
+        credits_spent[service_id] += action_cost
 
     for service_id in range(graph.n_services):
         service_probability = float(diagnostics.belief_service[service_id])
@@ -358,6 +364,21 @@ def _validate_action_history(
             raise ValueError("executed probe action targets an inactive service")
         decoded.append((service_id, template))
     return tuple(decoded)
+
+
+def _validate_action_costs(
+    costs: Iterable[int] | None,
+    actions: tuple[tuple[int, ProbeTemplate], ...],
+) -> tuple[int, ...]:
+    if costs is None:
+        return tuple(template.cost_credits for _, template in actions)
+    try:
+        values = tuple(costs)
+    except TypeError as error:
+        raise TypeError("executed_probe_costs must be iterable") from error
+    if len(values) != len(actions):
+        raise ValueError("executed probe actions and costs must have equal length")
+    return tuple(_nonnegative_integer(value, "executed probe cost") for value in values)
 
 
 def _resolve_available_tools(

@@ -1,1 +1,20 @@
 version: fixtures_v0
+fixtures:
+  known_answer:
+    purpose: public initial evidence determines the cause
+  one_perfect_probe:
+    purpose: one cheap probe separates two equally likely causes
+  useless_evidence:
+    purpose: evidence has the same distribution under both causes
+  duplicate_evidence:
+    purpose: two template paths cover the same evidence ID
+  expensive_discriminator:
+    purpose: probe value crosses the cost break-even point
+  scope_choice:
+    purpose: quick and detailed scopes expose different evidence sets
+  last_credit_evidence:
+    purpose: a final affordable probe changes the scored diagnosis
+  no_affordable_probe:
+    purpose: only STOP remains when probe cost exceeds the budget
+  two_probe_complementarity:
+    purpose: either bit is useless alone while both identify the cause

@@ -13,9 +13,13 @@ def test_full_probability_and_inference_validation_passes() -> None:
     assert report.passed
     assert report.observation_samples_per_hypothesis == 10_000
     assert report.prior_samples == 60_000
-    assert len(report.checks) == 7
+    assert len(report.checks) == 8
     assert all(check.passed for check in report.checks)
-    assert {check.name.split()[0] for check in report.checks} == {"8.1", "8.2"}
+    assert {check.name.split()[0] for check in report.checks} == {
+        "8.1",
+        "8.2",
+        "8.3",
+    }
 
 
 def test_validation_rejects_statistically_inadequate_sample_counts() -> None:

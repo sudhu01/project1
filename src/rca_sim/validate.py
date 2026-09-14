@@ -22,6 +22,19 @@ from rca_sim.contracts import (
     Workload,
 )
 from rca_sim.evidence import EvidenceLedger
+from rca_sim.fixtures import (
+    FixtureBelief,
+    FixtureEnv,
+    complementarity_fixture,
+    duplicate_evidence_fixture,
+    expensive_discriminator_fixture,
+    known_answer_fixture,
+    last_credit_evidence_fixture,
+    no_affordable_probe_fixture,
+    one_perfect_probe_fixture,
+    scope_choice_fixture,
+    useless_evidence_fixture,
+)
 from rca_sim.graph import DependencyGraph, classify_service_relationship
 from rca_sim.likelihoods import (
     log_category_probabilities,
@@ -29,7 +42,12 @@ from rca_sim.likelihoods import (
     metric_high_probabilities,
     metric_high_probability,
 )
-from rca_sim.tools import collect_probe_evidence, execute_probe_action, probe_action_index
+from rca_sim.tools import (
+    STOP_ACTION_INDEX,
+    collect_probe_evidence,
+    execute_probe_action,
+    probe_action_index,
+)
 from rca_sim.world import (
     HiddenHypothesis,
     generate_incident_world,
@@ -95,6 +113,7 @@ def run_validation(
         _validate_posterior_invariants(seed + 2),
         _validate_quick_detailed_and_duplicates(seed + 3),
         _validate_shared_workload_marginalization(),
+        _validate_decision_fixtures(seed + 4),
     )
     return ValidationReport(
         seed=seed,
@@ -477,6 +496,125 @@ def _validate_shared_workload_marginalization() -> ValidationCheck:
             "estimator_fault_posterior": actual.tolist(),
             "hand_enumerated_fault_posterior": correct.tolist(),
             "incorrect_fault_posterior": incorrect.tolist(),
+        },
+    )
+
+
+def _validate_decision_fixtures(seed: int) -> ValidationCheck:
+    perfect_action = probe_action_index(0, "metrics.quick")
+    detailed_action = probe_action_index(0, "metrics.detailed")
+
+    known = FixtureEnv(known_answer_fixture())
+    known.reset(seed=seed, options={"hidden_index": 1})
+    _, known_return, _, _, _ = known.step(STOP_ACTION_INDEX)
+
+    perfect = FixtureEnv(one_perfect_probe_fixture())
+    perfect.reset(seed=seed, options={"hidden_index": 1})
+    perfect_first = perfect.optimal_action()
+    perfect.step(perfect_first)
+    perfect_second = perfect.optimal_action()
+    perfect.step(perfect_second)
+
+    useless = FixtureEnv(useless_evidence_fixture())
+    useless.reset(seed=seed)
+
+    duplicate_definition = duplicate_evidence_fixture()
+    duplicate = FixtureEnv(duplicate_definition)
+    duplicate.reset(seed=seed, options={"hidden_index": 0})
+    duplicate_belief = FixtureBelief(duplicate_definition)
+    duplicate_records = duplicate.collect_action(perfect_action)
+    duplicate_belief.update(duplicate_records)
+    duplicate_before = duplicate_belief.posterior
+    duplicate_added = duplicate_belief.update(
+        duplicate.collect_action(detailed_action)
+    )
+    duplicate_error = float(
+        np.max(np.abs(duplicate_before - duplicate_belief.posterior))
+    )
+
+    inexpensive = FixtureEnv(
+        expensive_discriminator_fixture(cost_credits=4),
+        lambda_cost=0.10,
+    )
+    break_even = FixtureEnv(
+        expensive_discriminator_fixture(cost_credits=5),
+        lambda_cost=0.10,
+    )
+    inexpensive.reset(seed=seed)
+    break_even.reset(seed=seed)
+
+    roomy_scope = FixtureEnv(scope_choice_fixture(), initial_budget=8)
+    tight_scope = FixtureEnv(scope_choice_fixture(), initial_budget=1)
+    confident_scope = FixtureEnv(
+        scope_choice_fixture(prior=(0.95, 0.05)),
+        initial_budget=8,
+    )
+    for environment in (roomy_scope, tight_scope, confident_scope):
+        environment.reset(seed=seed)
+
+    last_credit = FixtureEnv(last_credit_evidence_fixture(), initial_budget=1)
+    last_credit.reset(seed=seed, options={"hidden_index": 1})
+    _, last_credit_return, last_done, _, last_info = last_credit.step(perfect_action)
+
+    no_affordable = FixtureEnv(no_affordable_probe_fixture(), initial_budget=1)
+    no_affordable_observation, _ = no_affordable.reset(seed=seed)
+    no_affordable.step(STOP_ACTION_INDEX)
+
+    complementarity = FixtureEnv(complementarity_fixture())
+    complementarity.reset(seed=seed, options={"hidden_index": 2})
+    complementarity_one_step = complementarity.optimal_action(lookahead=1)
+    complementarity_two_step = complementarity.optimal_action(lookahead=2)
+
+    choices = {
+        "known_answer": STOP_ACTION_INDEX,
+        "one_perfect_probe_first": perfect_first,
+        "one_perfect_probe_second": perfect_second,
+        "useless_evidence": useless.optimal_action(),
+        "inexpensive_discriminator": inexpensive.optimal_action(),
+        "break_even_discriminator": break_even.optimal_action(),
+        "roomy_scope": roomy_scope.optimal_action(),
+        "tight_scope": tight_scope.optimal_action(),
+        "confident_scope": confident_scope.optimal_action(),
+        "complementarity_one_step": complementarity_one_step,
+        "complementarity_two_step": complementarity_two_step,
+    }
+    expected_choices = {
+        "known_answer": STOP_ACTION_INDEX,
+        "one_perfect_probe_first": perfect_action,
+        "one_perfect_probe_second": STOP_ACTION_INDEX,
+        "useless_evidence": STOP_ACTION_INDEX,
+        "inexpensive_discriminator": perfect_action,
+        "break_even_discriminator": STOP_ACTION_INDEX,
+        "roomy_scope": detailed_action,
+        "tight_scope": perfect_action,
+        "confident_scope": STOP_ACTION_INDEX,
+        "complementarity_one_step": STOP_ACTION_INDEX,
+        "complementarity_two_step": perfect_action,
+    }
+    passed = (
+        choices == expected_choices
+        and known_return == 1.0
+        and perfect.episode_return == 0.95
+        and duplicate_added == ()
+        and duplicate_error == 0.0
+        and last_done
+        and last_info["diagnosis_correct"] is True
+        and last_credit_return == 0.95
+        and no_affordable.remaining_credits == 1
+        and int(no_affordable_observation["action_mask"].sum()) == 1
+    )
+    return ValidationCheck(
+        "8.3 controlled decision fixtures",
+        passed,
+        {
+            "fixture_count": 9,
+            "optimal_actions": choices,
+            "stop_action": STOP_ACTION_INDEX,
+            "known_answer_return": known_return,
+            "one_perfect_probe_return": perfect.episode_return,
+            "last_credit_transition_return": last_credit_return,
+            "duplicate_posterior_error": duplicate_error,
+            "no_affordable_remaining_credits": no_affordable.remaining_credits,
         },
     )
 
