@@ -62,6 +62,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
         lambda_cost: float = DEFAULT_LAMBDA_COST,
         extra_edge_probability: float = DEFAULT_EXTRA_EDGE_PROBABILITY,
         available_tools: Mapping[int, Collection[ProbeTool]] | None = None,
+        trace_enabled: bool = False,
     ) -> None:
         super().__init__()
         self._configured_n_services = _bounded_positive_integer(
@@ -88,6 +89,9 @@ class InvestigationEnv(gym.Env[Observation, int]):
             upper=1.0,
         )
         self.available_tools = _copy_available_tools(available_tools)
+        if not isinstance(trace_enabled, (bool, np.bool_)):
+            raise TypeError("trace_enabled must be boolean")
+        self.trace_enabled = bool(trace_enabled)
 
         self.action_space = gym.spaces.Discrete(STOP_ACTION_INDEX + 1)
         self.observation_space = make_observation_space()
@@ -104,6 +108,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
         self._termination_reason: str | None = None
         self._episode_return = 0.0
         self._case_id: str | None = None
+        self._trace_events: list[dict[str, Any]] = []
 
     @property
     def remaining_credits(self) -> int:
@@ -153,6 +158,11 @@ class InvestigationEnv(gym.Env[Observation, int]):
             return None
         return _copy_observation(self._last_pre_action_observation)
 
+    @property
+    def trace_events(self) -> tuple[dict[str, Any], ...]:
+        """Return copies of public trace events in episode order."""
+        return tuple(dict(event) for event in self._trace_events)
+
     def reset(
         self,
         *,
@@ -198,6 +208,9 @@ class InvestigationEnv(gym.Env[Observation, int]):
         self._last_pre_action_observation = None
         self._case_id = case_id
         self._observation = self._build_observation()
+
+        self._trace_events = []
+        self._record_trace("reset", action=None, reward=0.0)
 
         return _copy_observation(self._observation), self._public_info()
 
@@ -249,6 +262,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
                 "episode_return": self._episode_return,
             }
         )
+        self._record_trace("probe", action=action_index, reward=float(reward))
         return (
             _copy_observation(self._observation),
             float(reward),
@@ -280,6 +294,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
                 "episode_return": self._episode_return,
             }
         )
+        self._record_trace("stop", action=STOP_ACTION_INDEX, reward=float(reward))
         return (
             _copy_observation(self._observation),
             float(reward),
@@ -374,6 +389,33 @@ class InvestigationEnv(gym.Env[Observation, int]):
         if self._case_id is not None:
             info["case_id"] = self._case_id
         return info
+
+    def _record_trace(
+        self,
+        event: str,
+        *,
+        action: int | None,
+        reward: float,
+    ) -> None:
+        if not self.trace_enabled:
+            return
+        _, ledger, belief, _ = self._require_initialized_episode(
+            require_observation=False
+        )
+        self._trace_events.append(
+            {
+                "event": event,
+                "action": action,
+                "reward": reward,
+                "remaining_credits": self._remaining_credits,
+                "probes_taken": self._probes_taken,
+                "evidence_count": len(ledger),
+                "predicted_service": belief.predicted_service,
+                "predicted_fault": belief.predicted_fault.name.lower(),
+                "terminated": self._terminated,
+                "termination_reason": self._termination_reason,
+            }
+        )
 
     def _require_active_episode(
         self,

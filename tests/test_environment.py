@@ -9,7 +9,11 @@ import pytest
 from rca_sim.belief import ExactBeliefEstimator
 from rca_sim.environment import InvestigationEnv
 from rca_sim.tools import ProbeTool, collect_probe_evidence, probe_action_index
-from rca_sim.world import generate_incident_world
+from rca_sim.world import (
+    HiddenHypothesis,
+    HiddenIncidentWorld,
+    generate_incident_world,
+)
 
 
 def _assert_observations_equal(
@@ -450,3 +454,92 @@ def test_correct_current_prediction_does_not_end_a_probe_transition() -> None:
     assert reward == pytest.approx(-0.05)
     assert info["diagnosis_correct"] is None
     assert info["termination_reason"] is None
+
+
+def test_private_label_cannot_change_observations_masks_or_unscored_diagnosis() -> None:
+    source = generate_incident_world(n_services=8, incident_seed=801)
+    actions = (
+        probe_action_index(0, "metrics.quick"),
+        probe_action_index(1, "metrics.quick"),
+    )
+    estimator = ExactBeliefEstimator(source.graph)
+    for action in actions:
+        service_id = action // 4
+        estimator.update(collect_probe_evidence(source, "metrics.quick", service_id))
+    predicted = estimator.predicted_service
+    other = (predicted + 1) % source.graph.n_services
+
+    def relabeled(cause_service: int) -> HiddenIncidentWorld:
+        return HiddenIncidentWorld(
+            graph=source.graph,
+            hypothesis=HiddenHypothesis(
+                cause_service,
+                source.hypothesis.fault_type,
+                source.hypothesis.workload,
+            ),
+            observations=source.observations,
+            incident_seed=source.incident_seed,
+            extra_edge_probability=source.extra_edge_probability,
+        )
+
+    correct_env = InvestigationEnv()
+    wrong_env = InvestigationEnv()
+    correct_observation, correct_info = correct_env.reset(
+        options={"case": relabeled(predicted)}
+    )
+    wrong_observation, wrong_info = wrong_env.reset(options={"case": relabeled(other)})
+    _assert_observations_equal(correct_observation, wrong_observation)
+    assert correct_info == wrong_info
+
+    for action in actions:
+        correct_result = correct_env.step(action)
+        wrong_result = wrong_env.step(action)
+        _assert_observations_equal(correct_result[0], wrong_result[0])
+        assert correct_result[1:] == wrong_result[1:]
+        assert correct_result[4]["diagnosis_correct"] is None
+
+    correct_stop = correct_env.step(40)
+    wrong_stop = wrong_env.step(40)
+    _assert_observations_equal(correct_stop[0], wrong_stop[0])
+    assert correct_stop[1] == 1.0
+    assert wrong_stop[1] == 0.0
+
+
+def test_tracing_does_not_change_a_fixed_episode() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=802)
+    plain = InvestigationEnv(trace_enabled=False)
+    traced = InvestigationEnv(trace_enabled=True)
+    plain_observation, plain_info = plain.reset(options={"case": world})
+    traced_observation, traced_info = traced.reset(options={"case": world})
+
+    _assert_observations_equal(plain_observation, traced_observation)
+    assert plain_info == traced_info
+    assert plain.trace_events == ()
+
+    actions = (
+        probe_action_index(0, "metrics.quick"),
+        probe_action_index(1, "metrics.quick"),
+        40,
+    )
+    for action in actions:
+        plain_result = plain.step(action)
+        traced_result = traced.step(action)
+        _assert_observations_equal(plain_result[0], traced_result[0])
+        assert plain_result[1:] == traced_result[1:]
+
+    assert [event["event"] for event in traced.trace_events] == [
+        "reset",
+        "probe",
+        "probe",
+        "stop",
+    ]
+    assert not {
+        "cause_service",
+        "incident_seed",
+        "workload",
+    } & set().union(*(event.keys() for event in traced.trace_events))
+
+
+def test_trace_enabled_requires_a_boolean() -> None:
+    with pytest.raises(TypeError, match="trace_enabled"):
+        InvestigationEnv(trace_enabled=1)  # type: ignore[arg-type]

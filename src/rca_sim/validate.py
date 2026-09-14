@@ -22,6 +22,7 @@ from rca_sim.contracts import (
     Workload,
 )
 from rca_sim.evidence import EvidenceLedger
+from rca_sim.environment import InvestigationEnv
 from rca_sim.fixtures import (
     FixtureBelief,
     FixtureEnv,
@@ -50,6 +51,7 @@ from rca_sim.tools import (
 )
 from rca_sim.world import (
     HiddenHypothesis,
+    HiddenIncidentWorld,
     generate_incident_world,
     generate_synthetic_observations,
     sample_hidden_hypothesis,
@@ -57,6 +59,7 @@ from rca_sim.world import (
 
 
 MIN_OBSERVATION_SAMPLES = 10_000
+MIN_TRANSITION_SAMPLES = 10_000
 DEFAULT_PRIOR_SAMPLES = 60_000
 DEFAULT_SEED = 20260914
 NUMERICAL_MARGIN = 0.001
@@ -78,6 +81,7 @@ class ValidationReport:
     seed: int
     observation_samples_per_hypothesis: int
     prior_samples: int
+    transition_samples: int
     checks: tuple[ValidationCheck, ...]
 
     @property
@@ -96,6 +100,7 @@ def run_validation(
     seed: int = DEFAULT_SEED,
     observation_samples: int = MIN_OBSERVATION_SAMPLES,
     prior_samples: int = DEFAULT_PRIOR_SAMPLES,
+    transition_samples: int = MIN_TRANSITION_SAMPLES,
 ) -> ValidationReport:
     """Run the complete validation required by plan steps 8.1 and 8.2."""
     if observation_samples < MIN_OBSERVATION_SAMPLES:
@@ -104,6 +109,10 @@ def run_validation(
         )
     if prior_samples < MIN_OBSERVATION_SAMPLES:
         raise ValueError(f"prior_samples must be at least {MIN_OBSERVATION_SAMPLES}")
+    if transition_samples < MIN_TRANSITION_SAMPLES:
+        raise ValueError(
+            f"transition_samples must be at least {MIN_TRANSITION_SAMPLES}"
+        )
 
     checks = (
         _validate_probability_tables(),
@@ -114,11 +123,16 @@ def run_validation(
         _validate_quick_detailed_and_duplicates(seed + 3),
         _validate_shared_workload_marginalization(),
         _validate_decision_fixtures(seed + 4),
+        _validate_mask_stress(seed + 5, transition_samples),
+        _validate_mask_edges(seed + 6),
+        _validate_label_isolation(seed + 7),
+        _validate_trace_equivalence(seed + 8),
     )
     return ValidationReport(
         seed=seed,
         observation_samples_per_hypothesis=observation_samples,
         prior_samples=prior_samples,
+        transition_samples=transition_samples,
         checks=checks,
     )
 
@@ -619,6 +633,237 @@ def _validate_decision_fixtures(seed: int) -> ValidationCheck:
     )
 
 
+def _validate_mask_stress(seed: int, transition_count: int) -> ValidationCheck:
+    action_rng = np.random.default_rng(seed)
+    episode_rng = np.random.default_rng(seed + 1)
+    environment = InvestigationEnv()
+    observation, _ = environment.reset(
+        seed=int(episode_rng.integers(0, np.iinfo(np.int32).max))
+    )
+    mask_violations = 0
+    negative_budgets = 0
+    nan_observations = 0
+    padded_action_exposures = 0
+    missing_stop_actions = 0
+    duplicate_terminal_payouts = 0
+    terminal_checks = 0
+    episodes = 1
+
+    for transition_index in range(transition_count):
+        mask = observation["action_mask"]
+        padded_action_exposures += int(mask[32:STOP_ACTION_INDEX].sum())
+        missing_stop_actions += int(not bool(mask[STOP_ACTION_INDEX]))
+        valid = np.flatnonzero(mask)
+        probe_actions = valid[valid != STOP_ACTION_INDEX]
+        if len(probe_actions) and action_rng.random() >= 0.10:
+            action = int(action_rng.choice(probe_actions))
+        else:
+            action = int(action_rng.choice(valid))
+        if not bool(mask[action]):
+            mask_violations += 1
+
+        observation, _, terminated, truncated, _ = environment.step(action)
+        if truncated:
+            mask_violations += 1
+        negative_budgets += int(environment.remaining_credits < 0)
+        nan_observations += int(
+            any(np.isnan(values).any() for values in observation.values())
+        )
+
+        if terminated:
+            terminal_checks += 1
+            scored_return = environment.episode_return
+            try:
+                environment.step(STOP_ACTION_INDEX)
+            except RuntimeError:
+                pass
+            else:
+                duplicate_terminal_payouts += 1
+            duplicate_terminal_payouts += int(
+                environment.episode_return != scored_return
+            )
+            if transition_index + 1 < transition_count:
+                observation, _ = environment.reset(
+                    seed=int(episode_rng.integers(0, np.iinfo(np.int32).max))
+                )
+                episodes += 1
+
+    violations = (
+        mask_violations
+        + negative_budgets
+        + nan_observations
+        + padded_action_exposures
+        + missing_stop_actions
+        + duplicate_terminal_payouts
+    )
+    return ValidationCheck(
+        "8.4 mask-aware random transition stress",
+        violations == 0 and terminal_checks > 0,
+        {
+            "transitions": transition_count,
+            "episodes": episodes,
+            "terminal_payout_checks": terminal_checks,
+            "mask_violations": mask_violations,
+            "negative_budgets": negative_budgets,
+            "nan_observations": nan_observations,
+            "padded_action_exposures": padded_action_exposures,
+            "missing_stop_actions": missing_stop_actions,
+            "duplicate_terminal_payouts": duplicate_terminal_payouts,
+        },
+    )
+
+
+def _validate_mask_edges(seed: int) -> ValidationCheck:
+    environment = InvestigationEnv(initial_budget=1)
+    before, _ = environment.reset(seed=seed)
+    before_records = environment.evidence_records
+    before_actions = environment.executed_probe_actions
+    before_return = environment.episode_return
+    padded_action = probe_action_index(8, "metrics.quick")
+    invalid_rejected = False
+    try:
+        environment.step(padded_action)
+    except ValueError:
+        invalid_rejected = True
+    after_invalid = environment.current_observation
+    unchanged = after_invalid is not None and _observations_equal(before, after_invalid)
+    unchanged &= environment.remaining_credits == 1
+    unchanged &= environment.evidence_records == before_records
+    unchanged &= environment.executed_probe_actions == before_actions
+    unchanged &= environment.episode_return == before_return
+
+    affordable = probe_action_index(0, "metrics.quick")
+    expensive = probe_action_index(0, "logs.quick")
+    mask = before["action_mask"]
+    last_affordable_valid = bool(mask[affordable]) and not bool(mask[expensive])
+    stop_valid = bool(mask[STOP_ACTION_INDEX])
+    _, _, terminated, _, _ = environment.step(affordable)
+    passed = (
+        invalid_rejected
+        and unchanged
+        and last_affordable_valid
+        and stop_valid
+        and terminated
+        and environment.remaining_credits == 0
+    )
+    return ValidationCheck(
+        "8.4 padded, affordable, STOP, and atomic invalid-action edges",
+        passed,
+        {
+            "invalid_action_rejected": invalid_rejected,
+            "invalid_action_state_unchanged": unchanged,
+            "last_affordable_probe_valid": last_affordable_valid,
+            "stop_valid_before_termination": stop_valid,
+            "remaining_credits_after_last_probe": environment.remaining_credits,
+        },
+    )
+
+
+def _validate_label_isolation(seed: int) -> ValidationCheck:
+    source = generate_incident_world(n_services=8, incident_seed=seed)
+    actions = (
+        probe_action_index(0, "metrics.quick"),
+        probe_action_index(1, "metrics.quick"),
+    )
+    estimator = ExactBeliefEstimator(source.graph)
+    for action in actions:
+        service_id, _ = divmod(action, 4)
+        estimator.update(
+            collect_probe_evidence(source, "metrics.quick", service_id)
+        )
+    predicted = estimator.predicted_service
+    other = (predicted + 1) % source.graph.n_services
+
+    def relabel(cause_service: int) -> HiddenIncidentWorld:
+        return HiddenIncidentWorld(
+            graph=source.graph,
+            hypothesis=HiddenHypothesis(
+                cause_service,
+                source.hypothesis.fault_type,
+                source.hypothesis.workload,
+            ),
+            observations=source.observations,
+            incident_seed=source.incident_seed,
+            extra_edge_probability=source.extra_edge_probability,
+        )
+
+    correct = InvestigationEnv()
+    wrong = InvestigationEnv()
+    correct_observation, correct_info = correct.reset(
+        options={"case": relabel(predicted)}
+    )
+    wrong_observation, wrong_info = wrong.reset(options={"case": relabel(other)})
+    public_state_equal = (
+        _observations_equal(correct_observation, wrong_observation)
+        and correct_info == wrong_info
+    )
+    for action in actions:
+        correct_result = correct.step(action)
+        wrong_result = wrong.step(action)
+        public_state_equal &= _observations_equal(correct_result[0], wrong_result[0])
+        public_state_equal &= correct_result[1:] == wrong_result[1:]
+        public_state_equal &= correct_result[4]["diagnosis_correct"] is None
+
+    correct_stop = correct.step(STOP_ACTION_INDEX)
+    wrong_stop = wrong.step(STOP_ACTION_INDEX)
+    terminal_observation_equal = _observations_equal(
+        correct_stop[0],
+        wrong_stop[0],
+    )
+    rewards_differ_only_at_score = correct_stop[1] == 1.0 and wrong_stop[1] == 0.0
+    return ValidationCheck(
+        "8.4 private-label isolation",
+        public_state_equal and terminal_observation_equal and rewards_differ_only_at_score,
+        {
+            "public_state_equal_before_score": public_state_equal,
+            "terminal_observation_equal": terminal_observation_equal,
+            "matching_label_stop_reward": correct_stop[1],
+            "other_label_stop_reward": wrong_stop[1],
+        },
+    )
+
+
+def _validate_trace_equivalence(seed: int) -> ValidationCheck:
+    world = generate_incident_world(n_services=8, incident_seed=seed)
+    plain = InvestigationEnv(trace_enabled=False)
+    traced = InvestigationEnv(trace_enabled=True)
+    plain_observation, plain_info = plain.reset(options={"case": world})
+    traced_observation, traced_info = traced.reset(options={"case": world})
+    equal = (
+        _observations_equal(plain_observation, traced_observation)
+        and plain_info == traced_info
+    )
+    actions = (
+        probe_action_index(0, "metrics.quick"),
+        probe_action_index(1, "metrics.quick"),
+        STOP_ACTION_INDEX,
+    )
+    for action in actions:
+        plain_result = plain.step(action)
+        traced_result = traced.step(action)
+        equal &= _observations_equal(plain_result[0], traced_result[0])
+        equal &= plain_result[1:] == traced_result[1:]
+    private_fields = {"cause_service", "incident_seed", "workload"}
+    trace_fields = set().union(*(event.keys() for event in traced.trace_events))
+    no_private_fields = not bool(private_fields & trace_fields)
+    return ValidationCheck(
+        "8.4 tracing preserves episode outcomes and RNG behavior",
+        equal and not plain.trace_events and len(traced.trace_events) == 4 and no_private_fields,
+        {
+            "fixed_sequence_equal": equal,
+            "plain_trace_events": len(plain.trace_events),
+            "traced_events": list(traced.trace_events),
+            "private_trace_fields": sorted(private_fields & trace_fields),
+        },
+    )
+
+
+def _observations_equal(left: dict[str, np.ndarray], right: dict[str, np.ndarray]) -> bool:
+    return left.keys() == right.keys() and all(
+        np.array_equal(left[key], right[key]) for key in left
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -628,6 +873,11 @@ def main(argv: list[str] | None = None) -> int:
         default=MIN_OBSERVATION_SAMPLES,
     )
     parser.add_argument("--prior-samples", type=int, default=DEFAULT_PRIOR_SAMPLES)
+    parser.add_argument(
+        "--transition-samples",
+        type=int,
+        default=MIN_TRANSITION_SAMPLES,
+    )
     parser.add_argument("--output", type=Path)
     arguments = parser.parse_args(argv)
 
@@ -635,6 +885,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=arguments.seed,
         observation_samples=arguments.observation_samples,
         prior_samples=arguments.prior_samples,
+        transition_samples=arguments.transition_samples,
     )
     rendered = json.dumps(report.as_dict(), indent=2) + "\n"
     if arguments.output is not None:

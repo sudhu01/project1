@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.3 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 8.4 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -111,3 +111,10 @@ Its exact finite-state planner reports one-step or multi-step action values and
 favors STOP on ties. The step 8.3 validation checks all required decisions,
 including the two-bit complementarity case where depth one stops and depth two
 investigates.
+
+`InvestigationEnv(trace_enabled=True)` records public reset, probe, and STOP
+events without reading the environment RNG or exposing the hidden incident
+label. The step 8.4 validator samples 10,000 valid transitions and checks masks,
+budgets, finite observations, padded actions, terminal payout protection, the
+last affordable probe, invalid-action atomicity, private-label isolation, and
+trace equivalence. The transition sample count cannot be set below 10,000.
