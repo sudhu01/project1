@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 7.4 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 7.5 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -88,3 +88,10 @@ cost, update belief from unseen evidence, and auto-finalize on budget, horizon,
 or lack of another feasible probe. STOP ends immediately at zero cost and
 scores the current service diagnosis. Every episode return is terminal
 correctness minus `lambda_cost` times total credits spent.
+
+Normal environment steps always return `truncated=False`. STOP and public
+resource limits are true terminations, and the environment rejects another
+step until reset so an incident cannot be scored twice. Collectors can copy
+the live observation at a batch cutoff without changing episode state, then
+bootstrap from it and continue the same incident in the next batch. External
+Gymnasium wrappers may still report their own truncation separately.

@@ -126,6 +126,18 @@ class InvestigationEnv(gym.Env[Observation, int]):
         return self._episode_return
 
     @property
+    def current_observation(self) -> Observation | None:
+        """Return a copy of the live state for a collection cutoff.
+
+        Reading this property does not terminate, truncate, reset, or score
+        the episode. A rollout collector can bootstrap from this observation
+        and continue the same incident in its next batch.
+        """
+        if self._observation is None:
+            return None
+        return _copy_observation(self._observation)
+
+    @property
     def evidence_records(self) -> tuple[EvidenceRecord, ...]:
         """Return the acquired public evidence in first-seen order."""
         return () if self._ledger is None else self._ledger.records

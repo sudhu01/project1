@@ -2,6 +2,7 @@
 
 import json
 
+import gymnasium as gym
 import numpy as np
 import pytest
 
@@ -233,11 +234,12 @@ def test_no_feasible_probe_auto_finalizes_without_an_extra_stop_step() -> None:
     )
     env.reset(seed=33)
 
-    _, reward, terminated, _, info = env.step(
+    _, reward, terminated, truncated, info = env.step(
         probe_action_index(0, "logs.quick")
     )
 
     assert terminated
+    assert not truncated
     assert env.remaining_credits == 1
     assert env.probes_taken == 1
     assert info["termination_reason"] == "no_probe_available"
@@ -292,6 +294,67 @@ def test_step_requires_reset_and_rejects_steps_after_auto_termination() -> None:
     env.step(0)
     with pytest.raises(RuntimeError, match="terminated"):
         env.step(0)
+
+
+def test_collection_cutoff_preserves_live_observation_and_episode_state() -> None:
+    env = InvestigationEnv()
+    env.reset(seed=56)
+    returned, reward, terminated, truncated, _ = env.step(
+        probe_action_index(0, "metrics.quick")
+    )
+
+    cutoff_observation = env.current_observation
+
+    assert cutoff_observation is not None
+    _assert_observations_equal(cutoff_observation, returned)
+    assert reward == pytest.approx(-0.05)
+    assert not terminated
+    assert not truncated
+    assert not env.terminated
+    assert env.termination_reason is None
+    assert env.probes_taken == 1
+    assert env.remaining_credits == 7
+
+    cutoff_observation["node_features"][0, 0] = 99
+    assert env.current_observation["node_features"][0, 0] in (0, 1)
+
+    _, stop_reward, stop_terminated, stop_truncated, stop_info = env.step(40)
+    assert stop_terminated
+    assert not stop_truncated
+    assert stop_info["termination_reason"] == "stop"
+    assert env.episode_return == pytest.approx(reward + stop_reward)
+
+
+def test_external_time_limit_reports_truncation_without_true_termination() -> None:
+    base_env = InvestigationEnv()
+    wrapped = gym.wrappers.TimeLimit(base_env, max_episode_steps=1)
+    wrapped.reset(seed=57)
+
+    observation, reward, terminated, truncated, info = wrapped.step(
+        probe_action_index(0, "metrics.quick")
+    )
+
+    assert reward == pytest.approx(-0.05)
+    assert not terminated
+    assert truncated
+    assert info["termination_reason"] is None
+    assert not base_env.terminated
+    assert base_env.termination_reason is None
+    assert base_env.current_observation is not None
+    _assert_observations_equal(base_env.current_observation, observation)
+
+
+def test_second_step_after_stop_cannot_score_the_episode_twice() -> None:
+    env = InvestigationEnv()
+    env.reset(seed=58)
+    env.step(40)
+    scored_return = env.episode_return
+
+    with pytest.raises(RuntimeError, match="terminated"):
+        env.step(40)
+
+    assert env.episode_return == scored_return
+    assert env.termination_reason == "stop"
 
 
 @pytest.mark.parametrize(("correct", "expected_reward"), [(True, 1.0), (False, 0.0)])
