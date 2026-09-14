@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.5 and baseline steps 9.1 through 9.5 of the small simulator
+Steps 3 through 8.5 and baseline steps 9.1 through 9.6 of the small simulator
 execution plan were completed on 2026-09-15.
 
 - Python: CPython 3.12.13, 64-bit
@@ -155,3 +155,8 @@ The finite fixture planner now memoizes posterior, evidence, budget, and horizon
 states during recursive search. `FixtureEnv.optimal_value` exposes its exact
 finite-horizon reference value, while `planner_cache_entries` and
 `planner_cache_hits` report the last search's memoization statistics.
+
+The `full_information` evaluator reference passes every frozen incident record
+to a fresh exact estimator. It reports diagnosis accuracy, confidence, evidence
+count, and inference time. Its return, credits, and probe counts are null because
+the reference removes acquisition limits and is not a feasible policy.

@@ -5,9 +5,13 @@ import pytest
 
 from rca_sim.baselines import OneStepValueOfInformationPolicy
 from rca_sim.environment import InvestigationEnv
-from rca_sim.evaluate import evaluate_baselines
+from rca_sim.evaluate import (
+    aggregate_results,
+    evaluate_baselines,
+    evaluate_full_information,
+)
 from rca_sim.fixtures import FixtureEnv, complementarity_fixture
-from rca_sim.oracle import one_step_plan
+from rca_sim.oracle import full_information_reference, one_step_plan
 from rca_sim.tools import STOP_ACTION_INDEX, probe_action_index
 from rca_sim.world import generate_incident_world
 
@@ -107,6 +111,7 @@ def test_evaluator_records_voi_runtime_separately_from_probe_credits() -> None:
         include_random=False,
         include_random_smoke=False,
         include_script=False,
+        include_full_information=False,
     )
 
     assert len(rows) == 1
@@ -114,6 +119,39 @@ def test_evaluator_records_voi_runtime_separately_from_probe_credits() -> None:
     assert rows[0].action_seed is None
     assert rows[0].planning_seconds > 0.0
     assert rows[0].credits_spent <= 8
+
+
+def test_full_information_reference_uses_every_frozen_record() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=947)
+
+    reference = full_information_reference(world)
+
+    assert reference.evidence_records == 72
+    assert 0 <= reference.predicted_service < 8
+    assert reference.predicted_fault in {"cpu", "memory", "network_delay"}
+    assert reference.service_confidence >= 0.125
+    assert isinstance(reference.diagnosis_correct, bool)
+
+
+def test_full_information_evaluation_is_not_reported_as_a_feasible_policy() -> None:
+    world = generate_incident_world(n_services=8, incident_seed=948)
+
+    row = evaluate_full_information(world, fallback_case_id="full-000")
+    summary = aggregate_results((row,))[0]
+
+    assert row.method == "full_information"
+    assert row.case_id == "full-000"
+    assert row.episode_return is None
+    assert row.credits_spent is None
+    assert row.probes_taken is None
+    assert row.actions == ()
+    assert row.termination_reason == "reference"
+    assert row.evidence_records == 72
+    assert row.planning_seconds > 0.0
+    assert summary.mean_return is None
+    assert summary.mean_credits_spent is None
+    assert summary.mean_probes_taken is None
+    assert summary.mean_evidence_records == pytest.approx(72.0)
 
 
 def test_fixture_planner_exposes_exact_finite_horizon_value_and_cache() -> None:

@@ -116,6 +116,10 @@ class InvestigationEnv(gym.Env[Observation, int]):
         return self._remaining_credits
 
     @property
+    def configured_n_services(self) -> int:
+        return self._configured_n_services
+
+    @property
     def probes_taken(self) -> int:
         return self._probes_taken
 
@@ -205,7 +209,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
             )
             case_id = None
         else:
-            world, case_id = _load_exact_case(
+            world, case_id = load_exact_case(
                 case,
                 default_n_services=self._configured_n_services,
                 default_edge_probability=self.extra_edge_probability,
@@ -482,12 +486,13 @@ def _validate_reset_options(options: dict[str, Any] | None) -> dict[str, Any]:
     return options
 
 
-def _load_exact_case(
+def load_exact_case(
     case: object,
     *,
     default_n_services: int,
     default_edge_probability: float,
 ) -> tuple[HiddenIncidentWorld, str | None]:
+    """Load an evaluator-only frozen incident from a supported case source."""
     if isinstance(case, HiddenIncidentWorld):
         if case.graph.n_services > MAX_SERVICE_SLOTS:
             raise ValueError("evaluation case exceeds the observation service limit")

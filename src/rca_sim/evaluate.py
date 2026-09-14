@@ -22,7 +22,8 @@ from rca_sim.baselines import (
     RandomIncludingStopPolicy,
     ScriptedInvestigatorPolicy,
 )
-from rca_sim.environment import InvestigationEnv
+from rca_sim.environment import InvestigationEnv, load_exact_case
+from rca_sim.oracle import full_information_reference
 from rca_sim.world import HiddenIncidentWorld
 
 
@@ -42,14 +43,15 @@ class EvaluationRow:
     case_id: str
     action_seed: int | None
     diagnosis_correct: bool
-    episode_return: float
-    credits_spent: int
-    probes_taken: int
+    episode_return: float | None
+    credits_spent: int | None
+    probes_taken: int | None
     predicted_service: int
     predicted_fault: str
     termination_reason: str
     actions: tuple[int, ...]
     planning_seconds: float = field(compare=False)
+    evidence_records: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,10 +63,11 @@ class AggregateRow:
     cases: int
     action_seeds: int
     accuracy: float
-    mean_return: float
-    mean_credits_spent: float
-    mean_probes_taken: float
+    mean_return: float | None
+    mean_credits_spent: float | None
+    mean_probes_taken: float | None
     mean_planning_seconds: float
+    mean_evidence_records: float
 
 
 def evaluate_episode(
@@ -109,6 +112,40 @@ def evaluate_episode(
         termination_reason=str(terminal_info["termination_reason"]),
         actions=tuple(actions),
         planning_seconds=planning_seconds,
+        evidence_records=len(environment.evidence_records),
+    )
+
+
+def evaluate_full_information(
+    case: CaseSource,
+    *,
+    fallback_case_id: str,
+    default_n_services: int = 8,
+    default_edge_probability: float = 0.15,
+) -> EvaluationRow:
+    """Evaluate one case after revealing all frozen evidence records."""
+    world, loaded_case_id = load_exact_case(
+        case,
+        default_n_services=default_n_services,
+        default_edge_probability=default_edge_probability,
+    )
+    started = perf_counter()
+    reference = full_information_reference(world)
+    planning_seconds = perf_counter() - started
+    return EvaluationRow(
+        method="full_information",
+        case_id=str(loaded_case_id or fallback_case_id),
+        action_seed=None,
+        diagnosis_correct=reference.diagnosis_correct,
+        episode_return=None,
+        credits_spent=None,
+        probes_taken=None,
+        predicted_service=reference.predicted_service,
+        predicted_fault=reference.predicted_fault,
+        termination_reason="reference",
+        actions=(),
+        planning_seconds=planning_seconds,
+        evidence_records=reference.evidence_records,
     )
 
 
@@ -123,6 +160,7 @@ def evaluate_baselines(
     include_random_smoke: bool = True,
     include_script: bool = True,
     include_voi1: bool = True,
+    include_full_information: bool = True,
     environment_factory: EnvironmentFactory = InvestigationEnv,
 ) -> tuple[EvaluationRow, ...]:
     """Evaluate baseline variants while reusing every case across methods."""
@@ -160,7 +198,7 @@ def evaluate_baselines(
         )
     if include_voi1:
         policy_factories.append(OneStepValueOfInformationPolicy)
-    if not policy_factories:
+    if not policy_factories and not include_full_information:
         raise ValueError("at least one baseline method must be enabled")
 
     rows: list[EvaluationRow] = []
@@ -175,6 +213,20 @@ def evaluate_baselines(
                         case,
                         policy,
                         fallback_case_id=f"case_{case_index:04d}",
+                    )
+                )
+        finally:
+            environment.close()
+    if include_full_information:
+        environment = environment_factory()
+        try:
+            for case_index, case in enumerate(frozen_cases):
+                rows.append(
+                    evaluate_full_information(
+                        case,
+                        fallback_case_id=f"case_{case_index:04d}",
+                        default_n_services=environment.configured_n_services,
+                        default_edge_probability=environment.extra_edge_probability,
                     )
                 )
         finally:
@@ -208,15 +260,20 @@ def aggregate_results(rows: Iterable[EvaluationRow]) -> tuple[AggregateRow, ...]
                     }
                 ),
                 accuracy=float(np.mean([row.diagnosis_correct for row in method_rows])),
-                mean_return=float(np.mean([row.episode_return for row in method_rows])),
-                mean_credits_spent=float(
-                    np.mean([row.credits_spent for row in method_rows])
+                mean_return=_optional_mean(
+                    [row.episode_return for row in method_rows]
                 ),
-                mean_probes_taken=float(
-                    np.mean([row.probes_taken for row in method_rows])
+                mean_credits_spent=_optional_mean(
+                    [row.credits_spent for row in method_rows]
+                ),
+                mean_probes_taken=_optional_mean(
+                    [row.probes_taken for row in method_rows]
                 ),
                 mean_planning_seconds=float(
                     np.mean([row.planning_seconds for row in method_rows])
+                ),
+                mean_evidence_records=float(
+                    np.mean([row.evidence_records for row in method_rows])
                 ),
             )
         )
@@ -299,6 +356,11 @@ def _unique_thresholds(values: Sequence[float]) -> tuple[float, ...]:
     return tuple(result)
 
 
+def _optional_mean(values: Sequence[float | int | None]) -> float | None:
+    present = [float(value) for value in values if value is not None]
+    return None if not present else float(np.mean(present))
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path)
@@ -306,8 +368,22 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--methods",
         nargs="+",
-        choices=("stop", "random", "random_stop", "script", "voi1"),
-        default=("stop", "random", "random_stop", "script", "voi1"),
+        choices=(
+            "stop",
+            "random",
+            "random_stop",
+            "script",
+            "voi1",
+            "full_information",
+        ),
+        default=(
+            "stop",
+            "random",
+            "random_stop",
+            "script",
+            "voi1",
+            "full_information",
+        ),
     )
     parser.add_argument(
         "--probe-budgets", nargs="+", type=int, default=DEFAULT_PROBE_BUDGETS
@@ -338,6 +414,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         include_random_smoke="random_stop" in methods,
         include_script="script" in methods,
         include_voi1="voi1" in methods,
+        include_full_information="full_information" in methods,
         environment_factory=_environment_factory_from_config(args.config),
     )
     summaries = aggregate_results(rows)

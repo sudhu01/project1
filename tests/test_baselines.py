@@ -30,6 +30,7 @@ def test_immediate_stop_never_acquires_evidence() -> None:
         include_random_smoke=False,
         include_script=False,
         include_voi1=False,
+        include_full_information=False,
     )
 
     assert len(rows) == 4
@@ -51,6 +52,7 @@ def test_random_acquisition_excludes_stop_until_probe_budget(probe_budget: int) 
         include_random_smoke=False,
         include_script=False,
         include_voi1=False,
+        include_full_information=False,
     )
     row = rows[0]
 
@@ -72,6 +74,7 @@ def test_random_policy_replays_with_same_action_seed_on_same_cases() -> None:
         include_random_smoke=False,
         include_script=False,
         include_voi1=False,
+        include_full_information=False,
     )
 
     first = evaluate_baselines(_cases(), **settings)
@@ -89,6 +92,7 @@ def test_random_action_seed_does_not_change_incident_cases() -> None:
         include_random_smoke=False,
         include_script=False,
         include_voi1=False,
+        include_full_information=False,
     )
 
     by_case = {}
@@ -122,6 +126,7 @@ def test_aggregate_results_keeps_random_variants_separate() -> None:
         include_random_smoke=False,
         include_script=False,
         include_voi1=False,
+        include_full_information=False,
     )
 
     summary = {row.method: row for row in aggregate_results(rows)}
@@ -159,6 +164,7 @@ def test_evaluate_cli_writes_episode_rows_and_summary(tmp_path) -> None:
             "--methods",
             "stop",
             "random",
+            "full_information",
             "--probe-budgets",
             "1",
             "--action-seeds",
@@ -175,12 +181,23 @@ def test_evaluate_cli_writes_episode_rows_and_summary(tmp_path) -> None:
         for line in (output / "episodes.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
-    assert len(episode_rows) == 6
+    assert len(episode_rows) == 8
     assert {row["case_id"] for row in episode_rows} == {
         "validation-000",
         "validation-001",
     }
-    assert {row["method"] for row in summary} == {"stop", "random_1_probes"}
+    assert {row["method"] for row in summary} == {
+        "stop",
+        "random_1_probes",
+        "full_information",
+    }
+    full_rows = [
+        row for row in episode_rows if row["method"] == "full_information"
+    ]
+    assert all(row["episode_return"] is None for row in full_rows)
+    assert all(row["credits_spent"] is None for row in full_rows)
+    assert all(row["probes_taken"] is None for row in full_rows)
+    assert all(row["evidence_records"] == 72 for row in full_rows)
 
 
 def test_script_starts_at_entry_then_uses_dependency_breadth_first_order() -> None:
@@ -233,6 +250,7 @@ def test_script_threshold_variants_are_evaluated_without_action_seeds() -> None:
         include_random=False,
         include_random_smoke=False,
         include_voi1=False,
+        include_full_information=False,
     )
 
     assert len(rows) == 8

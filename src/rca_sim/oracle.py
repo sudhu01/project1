@@ -10,7 +10,7 @@ from types import MappingProxyType
 
 import numpy as np
 
-from rca_sim.belief import record_likelihoods
+from rca_sim.belief import ExactBeliefEstimator, record_likelihoods
 from rca_sim.contracts import (
     FaultType,
     LogCategory,
@@ -27,6 +27,7 @@ from rca_sim.tools import (
     ProbeTool,
     decode_probe_action,
 )
+from rca_sim.world import HiddenIncidentWorld
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,39 @@ class OneStepPlan:
     action_values: Mapping[int, float]
     outcome_counts: Mapping[int, int]
     best_action: int
+
+
+@dataclass(frozen=True, slots=True)
+class FullInformationReference:
+    """Diagnosis produced after revealing every frozen incident record."""
+
+    predicted_service: int
+    predicted_fault: str
+    service_confidence: float
+    diagnosis_correct: bool
+    evidence_records: int
+
+
+def full_information_reference(
+    world: HiddenIncidentWorld,
+) -> FullInformationReference:
+    """Score exact inference with acquisition limits removed."""
+    if not isinstance(world, HiddenIncidentWorld):
+        raise TypeError("world must be a HiddenIncidentWorld")
+    estimator = ExactBeliefEstimator(world.graph)
+    estimator.update(world.evidence_by_id.values())
+    diagnostics = estimator.diagnostic_quantities()
+    return FullInformationReference(
+        predicted_service=diagnostics.predicted_service,
+        predicted_fault=diagnostics.predicted_fault.name.lower(),
+        service_confidence=float(
+            diagnostics.belief_service[diagnostics.predicted_service]
+        ),
+        diagnosis_correct=(
+            diagnostics.predicted_service == world.hypothesis.cause_service
+        ),
+        evidence_records=len(world.evidence_by_id),
+    )
 
 
 def one_step_plan(
