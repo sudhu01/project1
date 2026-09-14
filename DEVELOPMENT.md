@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 6.2 of the small simulator execution plan were completed on 2026-09-14.
+Steps 3 through 6.3 of the small simulator execution plan were completed on 2026-09-14.
 
 - Python: CPython 3.12.13, 64-bit
 - uv: 0.11.30
@@ -58,9 +58,13 @@ coverage fields.
 It rejects a conflicting value atomically, before adding any record from the
 batch.
 
-`rca_sim.belief.ExactBeliefEstimator` maintains the normalized float64
-posterior over every service, fault, and workload hypothesis. It updates from
-new metric and log records using the generator's public likelihood functions,
-deduplicates repeated evidence IDs, and exposes immutable service/fault,
-service, and busy-workload marginals. Diagnosis ties use the lowest service ID
-and then the lowest fault encoding.
+`rca_sim.belief.ExactBeliefEstimator` maintains unnormalized float64 log
+probabilities over every service, fault, and workload hypothesis. It updates
+from new metric and log records using the generator's public likelihood
+functions, deduplicates repeated evidence IDs, and normalizes through a stable
+log-sum-exp calculation. Zero likelihoods become negative infinity, while
+evidence that rules out every hypothesis raises `InconsistentEvidenceError`.
+The separate reference path recomputes from the uniform prior and the complete
+deduplicated ledger. The estimator exposes immutable service/fault, service,
+and busy-workload marginals. Diagnosis ties use the lowest service ID and then
+the lowest fault encoding.

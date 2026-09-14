@@ -58,13 +58,22 @@ class ExactBeliefEstimator:
 
         self._graph = graph
         shape = (graph.n_services, len(FaultType), len(Workload))
-        self._posterior = np.full(shape, 1.0 / np.prod(shape), dtype=np.float64)
+        self._log_weights = np.full(
+            shape,
+            -np.log(float(np.prod(shape))),
+            dtype=np.float64,
+        )
         self._evidence_by_id: dict[str, EvidenceRecord] = {}
 
     @property
     def posterior(self) -> FloatArray:
         """Return an immutable snapshot indexed by service, fault, workload."""
-        return _immutable_copy(self._posterior)
+        return _immutable_copy(_normalize_log_weights(self._log_weights))
+
+    @property
+    def log_weights(self) -> FloatArray:
+        """Return the cumulative unnormalized log probabilities."""
+        return _immutable_copy(self._log_weights)
 
     @property
     def evidence_ids(self) -> tuple[str, ...]:
@@ -99,27 +108,30 @@ class ExactBeliefEstimator:
         if not pending:
             return ()
 
-        batch_likelihood = np.ones_like(self._posterior)
+        log_likelihood = np.zeros_like(self._log_weights)
         for record in pending.values():
-            batch_likelihood *= self._likelihoods(record)
+            log_likelihood += _record_log_likelihoods(self._graph, record)
 
-        updated = self._posterior * batch_likelihood
-        normalizer = float(updated.sum())
-        if not np.isfinite(normalizer) or normalizer <= 0.0:
-            raise InconsistentEvidenceError(
-                "evidence is impossible under every supported hypothesis"
-            )
-        updated /= normalizer
+        updated = self._log_weights + log_likelihood
+        _normalize_log_weights(updated)
 
-        self._posterior = updated
+        self._log_weights = updated
         self._evidence_by_id.update(pending)
         return tuple(pending.values())
 
+    def reference_posterior(self) -> FloatArray:
+        """Recompute from the prior and complete deduplicated evidence ledger."""
+        return recompute_posterior(
+            self._graph,
+            self._evidence_by_id.values(),
+        )
+
     def diagnostic_quantities(self) -> DiagnosticQuantities:
         """Return the Section 6.2 marginals and deterministic diagnosis."""
-        service_fault = self._posterior.sum(axis=2)
+        posterior = _normalize_log_weights(self._log_weights)
+        service_fault = posterior.sum(axis=2)
         service = service_fault.sum(axis=1)
-        busy = float(self._posterior[:, :, Workload.BUSY].sum())
+        busy = float(posterior[:, :, Workload.BUSY].sum())
         predicted_service = int(np.argmax(service))
         predicted_fault = FaultType(int(np.argmax(service_fault[predicted_service])))
 
@@ -151,33 +163,99 @@ class ExactBeliefEstimator:
     def predicted_fault(self) -> FaultType:
         return self.diagnostic_quantities().predicted_fault
 
-    def _likelihoods(self, record: EvidenceRecord) -> FloatArray:
-        likelihoods = np.empty_like(self._posterior)
-        for cause_service in range(self._graph.n_services):
-            relationship = classify_service_relationship(
-                self._graph,
-                observed_service=record.service_id,
-                cause_service=cause_service,
+def recompute_posterior(
+    graph: DependencyGraph,
+    records: Iterable[EvidenceRecord],
+) -> FloatArray:
+    """Recompute a posterior from the uniform prior and complete evidence."""
+    if not isinstance(graph, DependencyGraph):
+        raise TypeError("graph must be a DependencyGraph")
+    try:
+        batch = tuple(records)
+    except TypeError as error:
+        raise TypeError("records must be an iterable of evidence records") from error
+
+    deduplicated: dict[str, EvidenceRecord] = {}
+    for record in batch:
+        _validate_record(record, graph.n_services)
+        existing = deduplicated.get(record.evidence_id)
+        if existing is not None and existing != record:
+            raise EvidenceConflictError(
+                f"evidence ID {record.evidence_id!r} has conflicting values"
             )
-            for fault_type in FaultType:
-                for workload in Workload:
-                    if isinstance(record, MetricEvidenceRecord):
-                        probability = metric_high_probability(
-                            relationship,
-                            fault_type,
-                            workload,
-                            record.metric,
-                        )
-                        likelihood = probability if record.value else 1.0 - probability
-                    else:
-                        likelihood = log_category_probability(
-                            relationship,
-                            fault_type,
-                            workload,
-                            record.value,
-                        )
-                    likelihoods[cause_service, fault_type, workload] = likelihood
-        return likelihoods
+        if existing is None:
+            deduplicated[record.evidence_id] = record
+
+    shape = (graph.n_services, len(FaultType), len(Workload))
+    log_weights = np.full(
+        shape,
+        -np.log(float(np.prod(shape))),
+        dtype=np.float64,
+    )
+    for record in deduplicated.values():
+        log_weights += _record_log_likelihoods(graph, record)
+    return _immutable_copy(_normalize_log_weights(log_weights))
+
+
+def _record_likelihoods(
+    graph: DependencyGraph,
+    record: EvidenceRecord,
+) -> FloatArray:
+    shape = (graph.n_services, len(FaultType), len(Workload))
+    likelihoods = np.empty(shape, dtype=np.float64)
+    for cause_service in range(graph.n_services):
+        relationship = classify_service_relationship(
+            graph,
+            observed_service=record.service_id,
+            cause_service=cause_service,
+        )
+        for fault_type in FaultType:
+            for workload in Workload:
+                if isinstance(record, MetricEvidenceRecord):
+                    probability = metric_high_probability(
+                        relationship,
+                        fault_type,
+                        workload,
+                        record.metric,
+                    )
+                    likelihood = probability if record.value else 1.0 - probability
+                else:
+                    likelihood = log_category_probability(
+                        relationship,
+                        fault_type,
+                        workload,
+                        record.value,
+                    )
+                likelihoods[cause_service, fault_type, workload] = likelihood
+    return likelihoods
+
+
+def _record_log_likelihoods(
+    graph: DependencyGraph,
+    record: EvidenceRecord,
+) -> FloatArray:
+    likelihoods = _record_likelihoods(graph, record)
+    if np.any(~np.isfinite(likelihoods)) or np.any(likelihoods < 0.0):
+        raise ValueError("evidence likelihoods must be finite and nonnegative")
+    result = np.full_like(likelihoods, -np.inf)
+    np.log(likelihoods, out=result, where=likelihoods > 0.0)
+    return result
+
+
+def _normalize_log_weights(log_weights: FloatArray) -> FloatArray:
+    maximum = float(np.max(log_weights))
+    if not np.isfinite(maximum):
+        raise InconsistentEvidenceError(
+            "evidence is impossible under every supported hypothesis"
+        )
+
+    shifted = np.exp(log_weights - maximum)
+    shifted_sum = float(shifted.sum())
+    if not np.isfinite(shifted_sum) or shifted_sum <= 0.0:
+        raise InconsistentEvidenceError(
+            "evidence is impossible under every supported hypothesis"
+        )
+    return shifted / shifted_sum
 
 
 def _validate_record(record: object, n_services: int) -> None:
