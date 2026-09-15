@@ -13,6 +13,7 @@ import gymnasium as gym
 from gymnasium.utils.env_checker import check_env
 
 from rca_sim.belief import ExactBeliefEstimator, recompute_posterior
+from rca_sim.config import load_simulator_config
 from rca_sim.contracts import (
     FaultType,
     LogCategory,
@@ -967,7 +968,29 @@ def main(argv: list[str] | None = None) -> int:
         default=MIN_TRANSITION_SAMPLES,
     )
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--cases", type=Path)
     arguments = parser.parse_args(argv)
+
+    input_checks: dict[str, Any] = {}
+    if arguments.config is not None:
+        config = load_simulator_config(arguments.config)
+        input_checks["config"] = {
+            "path": str(arguments.config),
+            "schema_version": config.schema_version,
+            "generator_version": config.generator_version,
+            "services": config.services,
+        }
+    if arguments.cases is not None:
+        manifest_path = arguments.cases / "manifest.json"
+        if not manifest_path.is_file():
+            raise ValueError(f"case root has no manifest: {manifest_path}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        input_checks["cases"] = {
+            "path": str(arguments.cases),
+            "master_seed": manifest.get("master_seed"),
+            "partitions": manifest.get("partitions"),
+        }
 
     report = run_validation(
         seed=arguments.seed,
@@ -975,10 +998,29 @@ def main(argv: list[str] | None = None) -> int:
         prior_samples=arguments.prior_samples,
         transition_samples=arguments.transition_samples,
     )
-    rendered = json.dumps(report.as_dict(), indent=2) + "\n"
+    payload = report.as_dict()
+    if input_checks:
+        payload["inputs"] = input_checks
+    rendered = json.dumps(payload, indent=2) + "\n"
     if arguments.output is not None:
-        arguments.output.parent.mkdir(parents=True, exist_ok=True)
-        arguments.output.write_text(rendered, encoding="utf-8")
+        output_path = arguments.output
+        if output_path.suffix.lower() != ".json":
+            output_path.mkdir(parents=True, exist_ok=True)
+            json_path = output_path / "validation.json"
+            summary_path = output_path / "summary.txt"
+        else:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            json_path = output_path
+            summary_path = output_path.with_suffix(".txt")
+        json_path.write_text(rendered, encoding="utf-8")
+        failed = [check.name for check in report.checks if not check.passed]
+        summary = (
+            f"Validation {'passed' if report.passed else 'failed'}: "
+            f"{len(report.checks) - len(failed)}/{len(report.checks)} checks passed.\n"
+        )
+        if failed:
+            summary += "Failed checks:\n" + "".join(f"- {name}\n" for name in failed)
+        summary_path.write_text(summary, encoding="utf-8")
     print(rendered, end="")
     return 0 if report.passed else 1
 

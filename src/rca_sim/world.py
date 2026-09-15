@@ -122,6 +122,7 @@ class HiddenIncidentWorld:
     incident_seed: int
     generator_version: str = GENERATOR_VERSION
     extra_edge_probability: float = 0.15
+    service_permutation: tuple[int, ...] | None = None
     _evidence_by_id: Mapping[str, EvidenceRecord] = field(
         init=False,
         repr=False,
@@ -144,6 +145,11 @@ class HiddenIncidentWorld:
         if not isinstance(self.generator_version, str) or not self.generator_version:
             raise ValueError("generator_version must be a nonempty string")
         edge_probability = _validate_edge_probability(self.extra_edge_probability)
+        permutation = self.service_permutation
+        if permutation is not None:
+            permutation = tuple(int(value) for value in permutation)
+            if sorted(permutation) != list(range(self.graph.n_services)):
+                raise ValueError("service_permutation must contain every service ID once")
 
         records: dict[str, EvidenceRecord] = {}
         for service_id in range(self.graph.n_services):
@@ -182,6 +188,7 @@ class HiddenIncidentWorld:
 
         object.__setattr__(self, "incident_seed", incident_seed)
         object.__setattr__(self, "extra_edge_probability", edge_probability)
+        object.__setattr__(self, "service_permutation", permutation)
         object.__setattr__(self, "_evidence_by_id", MappingProxyType(records))
 
     @property
@@ -209,11 +216,14 @@ class HiddenIncidentWorld:
                 f"cannot replay generator version {self.generator_version!r}; "
                 f"this runtime supports {GENERATOR_VERSION!r}"
             )
-        return generate_incident_world(
+        world = generate_incident_world(
             n_services=self.graph.n_services,
             incident_seed=self.incident_seed,
             extra_edge_probability=self.extra_edge_probability,
         )
+        if self.service_permutation is not None:
+            return permute_incident_world(world, self.service_permutation)
+        return world
 
 
 def enumerate_hidden_hypotheses(n_services: int) -> tuple[HiddenHypothesis, ...]:
@@ -326,6 +336,41 @@ def generate_incident_world(
         incident_seed=incident_seed,
         generator_version=GENERATOR_VERSION,
         extra_edge_probability=extra_edge_probability,
+    )
+
+
+def permute_incident_world(
+    world: HiddenIncidentWorld, permutation: tuple[int, ...] | list[int]
+) -> HiddenIncidentWorld:
+    """Relabel every public service-indexed field without changing semantics."""
+    if world.service_permutation is not None:
+        raise ValueError("cannot apply a second service permutation")
+    permutation = tuple(int(value) for value in permutation)
+    if sorted(permutation) != list(range(world.graph.n_services)):
+        raise ValueError("permutation must contain every service ID once")
+    edges = tuple((permutation[u], permutation[v]) for u, v in world.graph.edges)
+    graph = DependencyGraph.from_edges(
+        world.graph.n_services,
+        edges,
+        entry_service=permutation[world.graph.entry_service],
+    )
+    metrics = np.empty_like(world.observations.metric_readings)
+    logs = np.empty_like(world.observations.log_readings)
+    for old_id, new_id in enumerate(permutation):
+        metrics[new_id] = world.observations.metric_readings[old_id]
+        logs[new_id] = world.observations.log_readings[old_id]
+    return HiddenIncidentWorld(
+        graph=graph,
+        hypothesis=HiddenHypothesis(
+            cause_service=permutation[world.hypothesis.cause_service],
+            fault_type=world.hypothesis.fault_type,
+            workload=world.hypothesis.workload,
+        ),
+        observations=SyntheticObservations(metrics, logs),
+        incident_seed=world.incident_seed,
+        generator_version=world.generator_version,
+        extra_edge_probability=world.extra_edge_probability,
+        service_permutation=permutation,
     )
 
 

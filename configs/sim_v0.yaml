@@ -1,1 +1,37 @@
-version: sim_v0
+schema_version: 1
+generator_version: sim_v0
+services: 8
+max_services: 10
+extra_edge_probability: 0.15
+fault_types: [cpu, memory, network_delay]
+busy_probability: 0.5
+metric_readings_per_category: 2
+log_records_per_service: 3
+caller_decay: 0.7
+budget_credits: 8
+max_probes: 6
+lambda_cost: 0.05
+reward_shaping: none
+tool_costs:
+  metrics.quick: 1
+  metrics.detailed: 2
+  logs.quick: 2
+  logs.detailed: 4
+likelihoods:
+  metrics:
+    cause:
+      cpu: [0.85, 0.15, 0.75]
+      memory: [0.15, 0.85, 0.75]
+      network_delay: [0.15, 0.15, 0.90]
+    unrelated: [0.10, 0.10, 0.15]
+    busy_increment: [0.10, 0.10, 0.05]
+    busy_cap: 0.95
+    affected_caller_latency_base: 0.15
+    affected_caller_latency_increment: 0.55
+  logs:
+    resource_cause: [0.10, 0.65, 0.15, 0.10]
+    network_cause: [0.10, 0.10, 0.70, 0.10]
+    direct_caller: [0.25, 0.10, 0.55, 0.10]
+    unrelated: [0.75, 0.05, 0.10, 0.10]
+    busy_background: [0.25, 0.35, 0.30, 0.10]
+    busy_mixture_weight: 0.15

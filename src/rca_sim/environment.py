@@ -33,6 +33,7 @@ from rca_sim.world import (
     GENERATOR_VERSION,
     HiddenIncidentWorld,
     generate_incident_world,
+    permute_incident_world,
 )
 from rca_sim.graph import DependencyGraph
 
@@ -199,6 +200,7 @@ class InvestigationEnv(gym.Env[Observation, int]):
                 "incident_seed": world.incident_seed,
                 "n_services": world.graph.n_services,
                 "extra_edge_probability": world.extra_edge_probability,
+                "service_permutation": world.service_permutation,
             },
             "executed_probe_actions": tuple(self._executed_probe_actions),
             "observation": _copy_observation(observation),
@@ -602,14 +604,17 @@ def load_exact_case(
         lower=0.0,
         upper=1.0,
     )
-    return (
-        generate_incident_world(
+    world = generate_incident_world(
             n_services=n_services,
             incident_seed=incident_seed,
             extra_edge_probability=edge_probability,
-        ),
-        case_id,
-    )
+        )
+    raw_permutation = descriptor.get("service_permutation")
+    if raw_permutation is not None:
+        if not isinstance(raw_permutation, (list, tuple)):
+            raise TypeError("case service_permutation must be a list")
+        world = permute_incident_world(world, tuple(int(value) for value in raw_permutation))
+    return world, case_id
 
 
 def _action_index(action: int) -> int:

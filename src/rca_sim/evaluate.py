@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import concurrent.futures
 import json
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -13,6 +15,11 @@ from typing import Any
 
 import numpy as np
 import yaml
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import torch
 
 from rca_sim.baselines import (
     BaselinePolicy,
@@ -22,6 +29,10 @@ from rca_sim.baselines import (
     RandomIncludingStopPolicy,
     ScriptedInvestigatorPolicy,
 )
+from rca_sim.config import load_simulator_config
+from rca_sim.model import SmallPolicyNetwork
+from rca_sim.observation import Observation
+from rca_sim.rollout import observations_to_tensors
 from rca_sim.environment import InvestigationEnv, load_exact_case
 from rca_sim.oracle import full_information_reference
 from rca_sim.world import HiddenIncidentWorld
@@ -33,6 +44,30 @@ EnvironmentFactory = Callable[[], InvestigationEnv]
 DEFAULT_PROBE_BUDGETS = (1, 2, 4, 6)
 DEFAULT_ACTION_SEEDS = (9101, 9102, 9103, 9104, 9105)
 DEFAULT_SCRIPT_THRESHOLDS = (0.60, 0.75, 0.90, 0.99)
+
+
+@dataclass(slots=True)
+class CheckpointPolicy:
+    """Deterministic masked policy loaded from a training checkpoint."""
+
+    policy: SmallPolicyNetwork
+
+    @property
+    def name(self) -> str:
+        return "ppo"
+
+    @property
+    def action_seed(self) -> None:
+        return None
+
+    def reset(self) -> None:
+        pass
+
+    def select_action(self, observation: Observation) -> int:
+        self.policy.eval()
+        with torch.no_grad():
+            tensors = observations_to_tensors([observation])
+            return int(self.policy.act(tensors, deterministic=True).actions[0])
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +182,39 @@ def evaluate_full_information(
         planning_seconds=planning_seconds,
         evidence_records=reference.evidence_records,
     )
+
+
+def _evaluate_voi_case(task: tuple[str, str, dict[str, int | float]]) -> EvaluationRow:
+    """Evaluate one VOI case in an independent worker process."""
+    case_path, fallback_case_id, environment_kwargs = task
+    environment = InvestigationEnv(**environment_kwargs)
+    try:
+        return evaluate_episode(
+            environment,
+            case_path,
+            OneStepValueOfInformationPolicy(environment),
+            fallback_case_id=fallback_case_id,
+        )
+    finally:
+        environment.close()
+
+
+def evaluate_voi_parallel(
+    cases: Sequence[Path],
+    *,
+    config_path: Path,
+    workers: int,
+) -> tuple[EvaluationRow, ...]:
+    """Evaluate deterministic VOI cases in stable order across processes."""
+    if workers < 1:
+        raise ValueError("workers must be positive")
+    config = load_simulator_config(config_path)
+    tasks = tuple(
+        (str(case), f"case_{index:04d}", config.environment_kwargs())
+        for index, case in enumerate(cases)
+    )
+    with concurrent.futures.ProcessPoolExecutor(max_workers=workers) as executor:
+        return tuple(executor.map(_evaluate_voi_case, tasks, chunksize=4))
 
 
 def evaluate_baselines(
@@ -283,17 +351,8 @@ def aggregate_results(rows: Iterable[EvaluationRow]) -> tuple[AggregateRow, ...]
 def _environment_factory_from_config(path: Path | None) -> EnvironmentFactory:
     if path is None:
         return InvestigationEnv
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("simulator config must contain a mapping")
-    values = {
-        "n_services": payload.get("services", 8),
-        "initial_budget": payload.get("budget_credits", 8),
-        "max_probes": payload.get("max_probes", 6),
-        "lambda_cost": payload.get("lambda_cost", 0.05),
-        "extra_edge_probability": payload.get("extra_edge_probability", 0.15),
-    }
-    return lambda: InvestigationEnv(**values)
+    config = load_simulator_config(path)
+    return lambda: InvestigationEnv(**config.environment_kwargs())
 
 
 def _case_paths(path: Path) -> tuple[Path, ...]:
@@ -301,7 +360,7 @@ def _case_paths(path: Path) -> tuple[Path, ...]:
         return (path,)
     if not path.is_dir():
         raise ValueError(f"case path does not exist: {path}")
-    cases = tuple(sorted(path.rglob("*.json")))
+    cases = tuple(sorted(path.rglob("case_*.json")))
     if not cases:
         raise ValueError(f"case directory contains no JSON files: {path}")
     return cases
@@ -320,6 +379,58 @@ def _write_results(
         json.dumps([asdict(summary) for summary in summaries], indent=2, sort_keys=True)
         + "\n",
         encoding="utf-8",
+    )
+    _write_baseline_table(output / "baseline_table.csv", summaries)
+    _write_accuracy_cost_plot(output / "accuracy_vs_credits.png", summaries)
+    _write_representative_rows(output / "representative_traces.json", rows)
+
+
+def _write_baseline_table(path: Path, summaries: Sequence[AggregateRow]) -> None:
+    fields = tuple(AggregateRow.__dataclass_fields__)
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(asdict(summary) for summary in summaries)
+
+
+def _write_accuracy_cost_plot(path: Path, summaries: Sequence[AggregateRow]) -> None:
+    feasible = [row for row in summaries if row.mean_credits_spent is not None]
+    figure, axis = plt.subplots(figsize=(9, 6))
+    for row in feasible:
+        axis.scatter(row.mean_credits_spent, row.accuracy, s=35)
+        axis.annotate(
+            row.method,
+            (row.mean_credits_spent, row.accuracy),
+            xytext=(4, 4),
+            textcoords="offset points",
+            fontsize=7,
+        )
+    axis.set_xlabel("Mean credits spent")
+    axis.set_ylabel("Diagnosis accuracy")
+    axis.set_ylim(0.0, 1.0)
+    axis.grid(alpha=0.25)
+    figure.tight_layout()
+    figure.savefig(path, dpi=160)
+    plt.close(figure)
+
+
+def _write_representative_rows(path: Path, rows: Sequence[EvaluationRow]) -> None:
+    grouped: dict[str, list[EvaluationRow]] = defaultdict(list)
+    for row in rows:
+        grouped[row.method].append(row)
+    selected: list[dict[str, Any]] = []
+    for method in sorted(grouped):
+        method_rows = grouped[method]
+        for outcome in (True, False):
+            match = next(
+                (row for row in method_rows if row.diagnosis_correct is outcome), None
+            )
+            if match is not None:
+                item = asdict(match)
+                item["selection"] = "correct" if outcome else "incorrect"
+                selected.append(item)
+    path.write_text(
+        json.dumps(selected, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
 
@@ -398,14 +509,26 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_SCRIPT_THRESHOLDS,
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--workers", type=int, default=1)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     methods = set(args.methods)
-    rows = evaluate_baselines(
-        _case_paths(args.cases),
+    case_paths = _case_paths(args.cases)
+    if methods == {"voi1"} and args.checkpoint is None and args.workers > 1:
+        if args.config is None:
+            raise ValueError("parallel VOI evaluation requires --config")
+        rows = list(
+            evaluate_voi_parallel(
+                case_paths, config_path=args.config, workers=args.workers
+            )
+        )
+    else:
+        rows = list(evaluate_baselines(
+        case_paths,
         probe_budgets=args.probe_budgets,
         action_seeds=args.action_seeds,
         script_thresholds=args.script_thresholds,
@@ -416,7 +539,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         include_voi1="voi1" in methods,
         include_full_information="full_information" in methods,
         environment_factory=_environment_factory_from_config(args.config),
-    )
+        ))
+    if args.checkpoint is not None:
+        payload = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
+        network = SmallPolicyNetwork()
+        network.load_state_dict(payload["model_state"])
+        environment = _environment_factory_from_config(args.config)()
+        policy = CheckpointPolicy(network)
+        try:
+            for case_index, case in enumerate(case_paths):
+                rows.append(
+                    evaluate_episode(
+                        environment,
+                        case,
+                        policy,
+                        fallback_case_id=f"case_{case_index:04d}",
+                    )
+                )
+        finally:
+            environment.close()
     summaries = aggregate_results(rows)
     _write_results(args.output, rows, summaries)
     print(json.dumps([asdict(summary) for summary in summaries], indent=2))

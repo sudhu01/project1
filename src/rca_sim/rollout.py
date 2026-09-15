@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import copy
+import json
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 import torch
@@ -14,6 +16,7 @@ from rca_sim.environment import InvestigationEnv
 from rca_sim.model import SmallPolicyNetwork
 from rca_sim.observation import Observation
 from rca_sim.tools import STOP_ACTION_INDEX, decode_probe_action
+from rca_sim.world import HiddenIncidentWorld
 
 
 OBSERVATION_KEYS = (
@@ -178,11 +181,15 @@ class RolloutCollector:
         *,
         seed: int,
         device: torch.device | str = "cpu",
+        case_sources: Sequence[HiddenIncidentWorld | Mapping[str, object] | str | Path] | None = None,
+        permute_case_services: bool = False,
     ) -> None:
         if not environments:
             raise ValueError("at least one environment is required")
         self.environments = environments
         self.device = torch.device(device)
+        self.case_sources = tuple(case_sources or ())
+        self.permute_case_services = bool(permute_case_services)
         seed_sequence = np.random.SeedSequence(seed)
         self._episode_rngs = [
             np.random.default_rng(child)
@@ -284,6 +291,8 @@ class RolloutCollector:
             ],
             "episode_numbers": list(self._episode_numbers),
             "case_ids": list(self._case_ids),
+            "case_source_count": len(self.case_sources),
+            "permute_case_services": self.permute_case_services,
             "environments": [
                 environment.checkpoint_state()
                 for environment in self.environments
@@ -309,6 +318,10 @@ class RolloutCollector:
             )
         ):
             raise ValueError("collector checkpoint does not match environment count")
+        if state.get("case_source_count", 0) != len(self.case_sources):
+            raise ValueError("collector checkpoint case source count does not match")
+        if state.get("permute_case_services", False) != self.permute_case_services:
+            raise ValueError("collector checkpoint permutation mode does not match")
         for rng, rng_state in zip(self._episode_rngs, rng_states, strict=True):
             rng.bit_generator.state = copy.deepcopy(rng_state)
         for environment, environment_state in zip(
@@ -333,6 +346,24 @@ class RolloutCollector:
             self._episode_rngs[env_index].integers(0, np.iinfo(np.int32).max)
         )
         self._episode_numbers[env_index] += 1
+        if self.case_sources:
+            case_index = int(
+                self._episode_rngs[env_index].integers(0, len(self.case_sources))
+            )
+            case_source = self.case_sources[case_index]
+            if self.permute_case_services:
+                if not isinstance(case_source, (str, Path)):
+                    raise TypeError("permuted fixed cases must use JSON paths")
+                case_source = json.loads(Path(case_source).read_text(encoding="utf-8"))
+                world = case_source.get("world", case_source)
+                n_services = int(world.get("n_services", world.get("services", 8)))
+                world["service_permutation"] = self._episode_rngs[
+                    env_index
+                ].permutation(n_services).tolist()
+            return self.environments[env_index].reset(
+                seed=incident_seed,
+                options={"case": case_source},
+            )
         return self.environments[env_index].reset(seed=incident_seed)
 
     def _case_id(self, env_index: int, info: dict[str, Any]) -> str:

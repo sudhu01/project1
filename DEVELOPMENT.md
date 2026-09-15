@@ -1,6 +1,6 @@
 # Local development environment
 
-Steps 3 through 8.5 and baseline steps 9.1 through 9.6 of the small simulator
+Steps 3 through 11 and Step 12 stages A through H of the small simulator
 execution plan were completed on 2026-09-15.
 
 - Python: CPython 3.12.13, 64-bit
