@@ -1,0 +1,81 @@
+services:
+  carts:
+    cpus: 2.0
+    image: weaveworksdemos/carts@sha256:434d2f5a6e0e8beef1f253fe96f45b8437a703125fc003434c5282ecf8969a4f
+    mem_limit: 512m
+  carts-db:
+    command:
+    - mongod
+    - --wiredTigerCacheSizeGB
+    - '1'
+    cpus: 2.0
+    image: mongo@sha256:146c1fd999a660e697aac40bc6da842b005c7868232eb0b7d8996c8f3545b05d
+    mem_limit: 1536m
+  catalogue:
+    cpus: 2.0
+    image: weaveworksdemos/catalogue@sha256:0147a65b7116569439eefb1a6dbed455fe022464ef70e0c3cab75bc4a226b39b
+    mem_limit: 512m
+  catalogue-db:
+    cpus: 2.0
+    image: weaveworksdemos/catalogue-db@sha256:7ba74ec9adf88f6625b8d85d3323d1ee5232b39877e1590021ea485cf9457251
+    mem_limit: 512m
+  front-end:
+    cpus: 2.0
+    image: weaveworksdemos/front-end@sha256:26a2d9b6b291dee2dca32fca3f5bff6c2fa07bb5954359afcbc8001cc70eac71
+    mem_limit: 512m
+  loki:
+    cpus: 2.0
+    image: grafana/loki@sha256:b025a0220f390baaab01578aea2fe0ba677584d9f248c3fe5af15f84dd1de60d
+    mem_limit: 512m
+  neo4j:
+    cpus: 2.0
+    environment:
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    image: neo4j@sha256:211c4afab9a7b082980ab1eb9001361715f77ee178f7f090714422a4becb3c6e
+    mem_limit: 1g
+  orders:
+    cpus: 2.0
+    image: weaveworksdemos/orders@sha256:b622e40e83433baf6374f15e076b53893f79958640fc6667dff597622eff03b9
+    mem_limit: 512m
+  orders-db:
+    command:
+    - mongod
+    - --wiredTigerCacheSizeGB
+    - '1'
+    cpus: 2.0
+    image: mongo@sha256:146c1fd999a660e697aac40bc6da842b005c7868232eb0b7d8996c8f3545b05d
+    mem_limit: 1536m
+  payment:
+    cpus: 2.0
+    image: weaveworksdemos/payment@sha256:5ab1c9877480a018d4dda10d6dfa382776e6bca9fc1c60bacbb80903fde8cfe0
+    mem_limit: 512m
+  prometheus:
+    cpus: 2.0
+    image: prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    mem_limit: 512m
+  promtail:
+    cpus: 2.0
+    image: grafana/promtail@sha256:c2c423196c75a2c9c26f6fe0ba7200c3167334b14975747f5dcff678bd1a32e9
+    mem_limit: 512m
+  queue-master:
+    cpus: 2.0
+    image: weaveworksdemos/queue-master@sha256:6292d3095f4c7aeed8d863527f8ef6d7a75d3128f20fc61e57f398c100142712
+    mem_limit: 512m
+  rabbitmq:
+    cpus: 2.0
+    image: rabbitmq@sha256:0297618bd60270f03665448b02b3b1110dfc51fae60a3c6804005169f0904dad
+    mem_limit: 512m
+  shipping:
+    cpus: 2.0
+    image: weaveworksdemos/shipping@sha256:983305c948fded487f4a4acdeab5f898e89d577b4bc1ca3de7750076469ccad4
+    mem_limit: 512m
+  user:
+    cpus: 2.0
+    image: weaveworksdemos/user@sha256:2ffccc332963c89e035fea52201012208bf62df43a55fe461ad6598a5c757ab7
+    mem_limit: 512m
+  user-db:
+    cpus: 2.0
+    image: weaveworksdemos/user-db@sha256:b43f0f8a76e0c908805fcec74d1ad7f4af4d93c4612632bd6dc20a87508e0b68
+    mem_limit: 512m

@@ -1,0 +1,12 @@
+{
+  "runtime_hash": "54322988ac5c35261153217f092d07d4a261dfe36d76098870652f824ad9ef46",
+  "isolated_v2_source": true,
+  "tests_verified": 197,
+  "initial_test_run": "195 passed; two missing local fixture failures",
+  "fixture_rechecks": "Pinned legacy helper, unchanged saved v1 reports and saved v1 bundles supplied to isolated copy; both failed checks passed",
+  "reserved_policy_evaluation_reopened": false,
+  "v3_implementation_included": false,
+  "parent_simulator_changes_included": false,
+  "raw_captures_and_large_generated_outputs": "Preserved locally under existing ignore rules",
+  "live_integration_started": false
+}

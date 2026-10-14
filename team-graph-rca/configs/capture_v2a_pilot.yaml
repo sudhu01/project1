@@ -1,0 +1,12 @@
+schema_version: 2
+task_id: sockshop_adaptive_v2a
+lab_batch: v2a-pilot
+sessions:
+- id: v2a-mechanics-1
+  role: pilot
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - healthy
+  - healthy_higher_load

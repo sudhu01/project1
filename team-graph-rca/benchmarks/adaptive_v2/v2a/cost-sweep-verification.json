@@ -1,0 +1,58 @@
+{
+  "passed": true,
+  "checked_at": "2026-10-08T11:45:38.651387+00:00",
+  "variants_verified": 5,
+  "training_runs_verified": 50,
+  "training_episodes_per_run": 10000,
+  "runtime_unchanged": true,
+  "raw_cohort_shared": true,
+  "reserved_comparisons_saved": true,
+  "synthetic_challenges_only": true,
+  "results": [
+    {
+      "lambda_cost": 0.0,
+      "selected": "fixed-0-0.8",
+      "accuracy": 1.0,
+      "mean_return": 1.0,
+      "mean_probes": 2.25,
+      "rl_promotions": 0,
+      "frozen_hash": "2ae326d65f0ba1bb671cfd12c4826c5cb2b77b1058ad8cdf575364ae151c1bf6"
+    },
+    {
+      "lambda_cost": 0.025,
+      "selected": "fixed-0-0.8",
+      "accuracy": 1.0,
+      "mean_return": 0.93125,
+      "mean_probes": 2.25,
+      "rl_promotions": 0,
+      "frozen_hash": "5820273e9747cfc4648b17ae8430d06878254abc0db21f817400a8b6e72c9a81"
+    },
+    {
+      "lambda_cost": 0.05,
+      "selected": "fixed-0-0.8",
+      "accuracy": 1.0,
+      "mean_return": 0.8625,
+      "mean_probes": 2.25,
+      "rl_promotions": 0,
+      "frozen_hash": "a612f90d228772605ff8cd0ff0e8448468c6e23568bda5cf330addb79996bb51"
+    },
+    {
+      "lambda_cost": 0.1,
+      "selected": "fixed-0-0.8",
+      "accuracy": 1.0,
+      "mean_return": 0.725,
+      "mean_probes": 2.25,
+      "rl_promotions": 0,
+      "frozen_hash": "d4072d229dd5078c12ba59f012ea674f16a34939f5bf9904beeb80684e450e8d"
+    },
+    {
+      "lambda_cost": 0.2,
+      "selected": "fixed-0-0.8",
+      "accuracy": 1.0,
+      "mean_return": 0.45,
+      "mean_probes": 2.25,
+      "rl_promotions": 0,
+      "frozen_hash": "bac46495c235978c1d015cd97dddcbcf80f97870f3aec4f46fde87b6f711bdd4"
+    }
+  ]
+}

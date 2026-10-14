@@ -1,0 +1,13 @@
+schema_version: 2
+task_id: sockshop_adaptive_v2b
+lab_batch: v2b-pilot
+sessions:
+- id: v2b-mechanics-1
+  role: pilot
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - healthy
+  - healthy_higher_load
+  - payment_path_delay

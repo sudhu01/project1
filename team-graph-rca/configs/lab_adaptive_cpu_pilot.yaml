@@ -1,0 +1,4 @@
+# Engineering-only quota setting. The two-core pilot lacked a checkout effect.
+services:
+  payment:
+    cpus: 0.25

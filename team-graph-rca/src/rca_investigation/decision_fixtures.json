@@ -1,0 +1,9 @@
+{
+  "perfect": {"classes": ["A", "B"], "labels": ["A", "B"], "responses": [["ZERO"], ["ONE"]], "prices": [1], "expected_depth2": 0.95, "expected_action": "PROBE"},
+  "useless": {"classes": ["A", "B"], "labels": ["A", "B"], "responses": [["ZERO"], ["ZERO"]], "prices": [1], "expected_depth2": 0.5, "expected_action": "STOP"},
+  "waste": {"classes": ["A", "B"], "labels": ["A", "B"], "responses": [["ZERO", "ZERO"], ["ONE", "ZERO"]], "prices": [1, 1], "expected_depth2": 0.95, "expected_action": "PROBE"},
+  "complementary": {"classes": ["A", "B"], "labels": ["A", "A", "B", "B"], "responses": [["ZERO", "ZERO"], ["ONE", "ONE"], ["ZERO", "ONE"], ["ONE", "ZERO"]], "prices": [1, 1], "expected_depth2": 0.9, "expected_action": "PROBE"},
+  "expensive": {"classes": ["A", "B"], "labels": ["A", "B"], "responses": [["ZERO"], ["ONE"]], "prices": [11], "expected_depth2": 0.5, "expected_action": "STOP"},
+  "exhausted": {"classes": ["A", "B", "C", "D", "E"], "labels": ["A", "B", "C", "D", "E"], "responses": [["ZERO"], ["ZERO"], ["ZERO"], ["ZERO"], ["ZERO"]], "prices": [1], "expected_depth2": 0.25, "expected_action": "DEFER"},
+  "timeout": {"classes": ["A", "B"], "labels": ["A", "B"], "responses": [["TIMEOUT"], ["TIMEOUT"]], "prices": [1], "expected_depth2": 0.5, "expected_action": "STOP"}
+}

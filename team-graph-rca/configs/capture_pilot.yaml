@@ -1,0 +1,7 @@
+dataset: datasets/sockshop_pilot_v1
+seed: 1101
+sessions:
+  - {id: pilot-train-1, per_class: 3, role: train}
+  - {id: pilot-train-2, per_class: 3, role: train}
+  - {id: pilot-validation, per_class: 2, role: validation}
+  - {id: pilot-test, per_class: 2, role: test}

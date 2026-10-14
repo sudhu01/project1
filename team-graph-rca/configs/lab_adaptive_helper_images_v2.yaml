@@ -1,0 +1,6 @@
+# Apply between physical cohorts, then rerun checkout/cart verification and inventory.
+services:
+  payment:
+    image: sha256:8ec54c6418c12fc034341a6aa5a374b43b9a1a3c2314f3a7302d437777b10c7b
+  carts:
+    image: sha256:2b409ed417b8f37ee584836d4258e3947ea0c5800323948acc639172baa104ff

@@ -1,0 +1,330 @@
+schema_version: 2
+task_id: sockshop_adaptive_v2b
+lab_batch: v2b-evaluation-protocol120
+protocol:
+  baseline_seconds: 120
+  settling_seconds: 30
+  observation_seconds: 120
+  ingestion_seconds: 10
+  concurrency: 1
+sessions:
+- id: v2b-train-01
+  role: train
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+- id: v2b-train-02
+  role: train
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+- id: v2b-train-03
+  role: train
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-train-04
+  role: train
+  scenarios:
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-train-05
+  role: train
+  scenarios:
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-train-06
+  role: train
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+- id: v2b-train-07
+  role: train
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+- id: v2b-train-08
+  role: train
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-train-09
+  role: train
+  scenarios:
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-train-10
+  role: train
+  scenarios:
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-train-11
+  role: train
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+- id: v2b-train-12
+  role: train
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+- id: v2b-train-13
+  role: train
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-train-14
+  role: train
+  scenarios:
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-train-15
+  role: train
+  scenarios:
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-train-16
+  role: train
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+- id: v2b-train-17
+  role: train
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+- id: v2b-train-18
+  role: train
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-train-19
+  role: train
+  scenarios:
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-train-20
+  role: train
+  scenarios:
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-validation-01
+  role: validation
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+- id: v2b-validation-02
+  role: validation
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+- id: v2b-validation-03
+  role: validation
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-validation-04
+  role: validation
+  scenarios:
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-validation-05
+  role: validation
+  scenarios:
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-validation-06
+  role: validation
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+- id: v2b-validation-07
+  role: validation
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+- id: v2b-validation-08
+  role: validation
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-validation-09
+  role: validation
+  scenarios:
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-validation-10
+  role: validation
+  scenarios:
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-test-01
+  role: test
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+- id: v2b-test-02
+  role: test
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+- id: v2b-test-03
+  role: test
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-test-04
+  role: test
+  scenarios:
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-test-05
+  role: test
+  scenarios:
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+- id: v2b-test-06
+  role: test
+  scenarios:
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+- id: v2b-test-07
+  role: test
+  scenarios:
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+- id: v2b-test-08
+  role: test
+  scenarios:
+  - payment_cpu
+  - payment_path_delay
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+- id: v2b-test-09
+  role: test
+  scenarios:
+  - payment_path_delay
+  - healthy
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+- id: v2b-test-10
+  role: test
+  scenarios:
+  - healthy_higher_load
+  - catalogue_db_stop
+  - orders_stop
+  - payment_cpu
+  - payment_path_delay

@@ -1,0 +1,189 @@
+{
+  "passed": true,
+  "checked_at": "2026-10-09T05:06:10.863576+00:00",
+  "accepted_captures_verified": 200,
+  "unique_physical_episodes": 200,
+  "roles": {
+    "test": 50,
+    "train": 100,
+    "validation": 50
+  },
+  "public_receipt_checksums_verified": true,
+  "private_labels_opened": false,
+  "training_runs_verified": 10,
+  "runtime_hash": "54322988ac5c35261153217f092d07d4a261dfe36d76098870652f824ad9ef46",
+  "frozen_hash": "629d2ea7d0a9b0583eac8a1ad256435976263479898c75d326aeb4c44e8923ea",
+  "selected": "dp",
+  "selected_summary": {
+    "accuracy": 1.0,
+    "brier_score": 0.0037278626516474007,
+    "calibration_bins": [
+      {
+        "accuracy": 1.0,
+        "count": 50,
+        "lower": 0.9,
+        "mean_confidence": 0.9519408906350132
+      }
+    ],
+    "confusion": {
+      "NO_FAULT": {
+        "NO_FAULT": 10
+      },
+      "edge/orders/payment": {
+        "edge/orders/payment": 10
+      },
+      "resource/catalogue-db": {
+        "resource/catalogue-db": 10
+      },
+      "resource/orders": {
+        "resource/orders": 10
+      },
+      "resource/payment": {
+        "resource/payment": 10
+      }
+    },
+    "coverage": 1.0,
+    "decision_latency_ms": 447.73850428048587,
+    "fallback_frequency": 0.0,
+    "lightly_visited_fraction": 0.0,
+    "mean_credits": 3.2,
+    "mean_probes": 1.8,
+    "mean_return": 0.8399999999999999,
+    "mechanism_prediction_enabled": false,
+    "path_accuracy": 1.0,
+    "physical_incidents": 50,
+    "planner_expanded_states": 276220,
+    "repeated_request_attempts": 0,
+    "resource_accuracy": 1.0,
+    "selective_accuracy": 1.0,
+    "termination_reasons": {
+      "voluntary": 50
+    },
+    "tool_failure_rate": 0.2222222222222222,
+    "unseen_state_fraction": 0.0
+  },
+  "rl_results": {
+    "expected-sarsa-11-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.08776213965445225
+    },
+    "expected-sarsa-11-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.06870714298981641
+    },
+    "expected-sarsa-22-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.09898428855064724
+    },
+    "expected-sarsa-22-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.08089356955939106
+    },
+    "expected-sarsa-33-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.0922735664062202
+    },
+    "expected-sarsa-33-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07222500031015702
+    },
+    "expected-sarsa-44-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.09078571705945901
+    },
+    "expected-sarsa-44-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07638357346877456
+    },
+    "expected-sarsa-55-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.08750928723852017
+    },
+    "expected-sarsa-55-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07507428817916662
+    },
+    "two-step-sarsa-11-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.09572856652084738
+    },
+    "two-step-sarsa-11-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07295999967027456
+    },
+    "two-step-sarsa-22-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.09408642695884087
+    },
+    "two-step-sarsa-22-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07642785952027355
+    },
+    "two-step-sarsa-33-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.0968264278656404
+    },
+    "two-step-sarsa-33-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07312071393243968
+    },
+    "two-step-sarsa-44-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.0915657142676147
+    },
+    "two-step-sarsa-44-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07581428840889462
+    },
+    "two-step-sarsa-55-hybrid": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.09781071650130409
+    },
+    "two-step-sarsa-55-tabular": {
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8,
+      "decision_latency_ms": 0.07263428664633206
+    }
+  },
+  "rl_promotions": 0,
+  "whole_profile_complete": false
+}

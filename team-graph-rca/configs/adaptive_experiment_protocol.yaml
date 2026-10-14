@@ -1,0 +1,33 @@
+schema_version: 2
+reference_revision: aa346b76092c81df548633674401c92dda31d86c
+public_entry: manual_frontend
+physical_protocol:
+  baseline_seconds: 120
+  settling_seconds: 30
+  observation_seconds: 120
+  ingestion_seconds: 10
+  concurrency: 1
+split_unit: capture_session
+incidents_per_cause:
+  train: 20
+  validation: 10
+  test: 10
+training_seeds: [11, 22, 33, 44, 55]
+training_episodes_per_seed: 10000
+training_methods: [expected-sarsa, two-step-sarsa]
+smoothing_validation_grid: [0.05, 0.10, 0.20]
+initial_smoothing: 0.10
+full_evidence_minimum_validation_accuracy: 0.90
+fixed_sequence_search_budget: 32
+fixed_sequence_candidates: global_information_order_and_joint_conditional_order_with_interleaved_useful_prefix_permutations
+fixed_sequence_confidence_grid: [0.8, 0.9, 0.95, 0.99, 1.0]
+cost_lambda_grid: [0.0, 0.025, 0.05, 0.1, 0.2]
+performance_promotion:
+  minimum_return_advantage: 0.02
+  paired_session_interval_lower_bound: 0.0
+  minimum_accuracy: 0.90
+  baseline: validation_selected_fixed_sequence
+mixture_hard_causes: [resource/payment, edge/orders/payment, resource/carts]
+mixture_hard_fractions: [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
+memory_claim: retained_resource_pressure_only_unless_customer_effect_is_verified
+challenge_claim: synthetic_source_perturbation_not_measured_outage_adaptation

@@ -1,0 +1,165 @@
+version: '3'
+
+networks:
+  sockshop:
+    driver: bridge
+
+services:
+
+  # ===== SOCK SHOP SERVICES =====
+
+  front-end:
+    image: weaveworksdemos/front-end:0.3.12
+    platform: linux/amd64
+    hostname: front-end
+    networks: [sockshop]
+    ports: ["80:8079"]
+    restart: "no"
+
+  catalogue:
+    image: weaveworksdemos/catalogue:0.3.5
+    platform: linux/amd64
+    hostname: catalogue
+    networks: [sockshop]
+    restart: "no"
+
+  catalogue-db:
+    image: weaveworksdemos/catalogue-db:0.3.0
+    platform: linux/amd64
+    hostname: catalogue-db
+    networks: [sockshop]
+    environment:
+      - MYSQL_ROOT_PASSWORD=fake_password
+      - MYSQL_ALLOW_EMPTY_PASSWORD="true"
+      - MYSQL_DATABASE=socksdb
+    restart: "no"
+
+  carts:
+    image: weaveworksdemos/carts:0.4.8
+    platform: linux/amd64
+    hostname: carts
+    networks: [sockshop]
+    environment:
+      - JAVA_OPTS=-Xms64m -Xmx128m
+    restart: "no"
+
+  carts-db:
+    image: mongo:3.4
+    platform: linux/amd64
+    hostname: carts-db
+    networks: [sockshop]
+    restart: "no"
+
+  orders:
+    image: weaveworksdemos/orders:0.4.7
+    platform: linux/amd64
+    hostname: orders
+    networks: [sockshop]
+    environment:
+      - JAVA_OPTS=-Xms64m -Xmx128m
+    restart: "no"
+
+  orders-db:
+    image: mongo:3.4
+    platform: linux/amd64
+    hostname: orders-db
+    networks: [sockshop]
+    restart: "no"
+
+  payment:
+    image: weaveworksdemos/payment:0.4.3
+    platform: linux/amd64
+    hostname: payment
+    networks: [sockshop]
+    restart: "no"
+
+  user:
+    image: weaveworksdemos/user:0.4.7
+    platform: linux/amd64
+    hostname: user
+    networks: [sockshop]
+    environment:
+      - MONGO_HOST=user-db:27017
+    restart: "no"
+
+  user-db:
+    image: weaveworksdemos/user-db:0.4.0
+    platform: linux/amd64
+    hostname: user-db
+    networks: [sockshop]
+    restart: "no"
+
+  shipping:
+    image: weaveworksdemos/shipping:0.4.8
+    platform: linux/amd64
+    hostname: shipping
+    networks: [sockshop]
+    environment:
+      - JAVA_OPTS=-Xms64m -Xmx128m
+    restart: "no"
+
+  queue-master:
+    image: weaveworksdemos/queue-master:0.3.1
+    platform: linux/amd64
+    hostname: queue-master
+    networks: [sockshop]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: "no"
+
+  rabbitmq:
+    image: rabbitmq:3.6.8-management
+    platform: linux/amd64
+    hostname: rabbitmq
+    networks: [sockshop]
+    ports: ["15672:15672"]
+    restart: "no"
+
+  # ===== OBSERVABILITY (PROMETHEUS, LOKI, CADVISOR) =====
+
+  prometheus:
+    image: prom/prometheus:latest
+    hostname: prometheus
+    networks: [sockshop]
+    ports: ["9090:9090"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=7d'
+    restart: "no"
+
+  loki:
+    image: grafana/loki:2.9.0
+    hostname: loki
+    networks: [sockshop]
+    ports: ["3100:3100"]
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: "no"
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    hostname: promtail
+    networks: [sockshop]
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    restart: "no"
+
+
+  # ===== NEO4J GRAPH DATABASE =====
+
+  neo4j:
+    image: neo4j:5.12.0
+    hostname: neo4j
+    networks: [sockshop]
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password123
+    volumes:
+      - ./neo4j/data:/data
+    restart: "no"

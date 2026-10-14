@@ -1,0 +1,130 @@
+actions:
+- action_id: logs/orders/v2
+  credits: 2
+  encoding_hash: 83e954447a6f161c567a52233c25598fc4d18271143caf5d2d802d7a81827b5c
+  parameters_json: '{"max_bytes":8192,"max_lines":20,"window_seconds":120}'
+  required_capabilities:
+  - logs
+  resource_id: orders
+  response_vocabulary:
+  - NO_RELEVANT_ERROR
+  - DEPENDENCY_ERROR
+  - RESOURCE_ERROR
+  - OTHER_ERROR
+  - UNAVAILABLE
+  schema_version: 2
+  template: logs
+- action_id: logs/payment/v2
+  credits: 2
+  encoding_hash: 83e954447a6f161c567a52233c25598fc4d18271143caf5d2d802d7a81827b5c
+  parameters_json: '{"max_bytes":8192,"max_lines":20,"window_seconds":120}'
+  required_capabilities:
+  - logs
+  resource_id: payment
+  response_vocabulary:
+  - NO_RELEVANT_ERROR
+  - DEPENDENCY_ERROR
+  - RESOURCE_ERROR
+  - OTHER_ERROR
+  - UNAVAILABLE
+  schema_version: 2
+  template: logs
+- action_id: latency/front-end/v2
+  credits: 2
+  encoding_hash: 83e954447a6f161c567a52233c25598fc4d18271143caf5d2d802d7a81827b5c
+  parameters_json: '{"min_samples":20,"operation":"checkout","window_seconds":120}'
+  required_capabilities:
+  - latency
+  resource_id: front-end
+  response_vocabulary:
+  - NORMAL
+  - SLOW
+  - UNAVAILABLE
+  schema_version: 2
+  template: latency
+- action_id: memory/carts/v2
+  credits: 2
+  encoding_hash: 83e954447a6f161c567a52233c25598fc4d18271143caf5d2d802d7a81827b5c
+  parameters_json: '{"window_seconds":120}'
+  required_capabilities:
+  - memory
+  resource_id: carts
+  response_vocabulary:
+  - NORMAL
+  - PRESSURE
+  - GROWTH
+  - PRESSURE_AND_GROWTH
+  - UNAVAILABLE
+  schema_version: 2
+  template: memory
+- action_id: logs/carts/v2
+  credits: 2
+  encoding_hash: 83e954447a6f161c567a52233c25598fc4d18271143caf5d2d802d7a81827b5c
+  parameters_json: '{"max_bytes":8192,"max_lines":20,"window_seconds":120}'
+  required_capabilities:
+  - logs
+  resource_id: carts
+  response_vocabulary:
+  - NO_RELEVANT_ERROR
+  - DEPENDENCY_ERROR
+  - RESOURCE_ERROR
+  - OTHER_ERROR
+  - UNAVAILABLE
+  schema_version: 2
+  template: logs
+diagnoses:
+- resource/catalogue-db
+- resource/orders
+- resource/payment
+- edge/orders/payment
+- resource/carts
+- NO_FAULT
+encoding_hash: 83e954447a6f161c567a52233c25598fc4d18271143caf5d2d802d7a81827b5c
+entry_protocol: manual_frontend
+episode:
+  budget: 10
+  max_probes: 5
+  observation_window_seconds: 120
+model:
+  prior: balanced_classes
+  smoothing: 0.1
+objective:
+  correct: 1.0
+  defer: 0.25
+  incorrect: 0.0
+  lambda_cost: 0.05
+paths:
+  dataset: datasets/sockshop_adaptive_v2c/ablations/9b4637017026
+  encoder: experiments/v2c_memory_separation_r1/encoder.json
+  model: runs/sockshop_adaptive_v2c/ablations/9b4637017026/model.json
+  raw_dataset: datasets/raw_v2c
+  resource_registry: configs/resources_sockshop_v2.yaml
+  runs: runs/sockshop_adaptive_v2c/ablations/9b4637017026
+planner:
+  depth: 2
+  max_expanded_states: 50000
+resources:
+- front-end
+- catalogue
+- catalogue-db
+- orders
+- payment
+- carts
+- carts-db
+schema_version: 2
+task_id: sockshop_adaptive_v2c
+training:
+  algorithm: expected_sarsa
+  alpha: 0.1
+  episodes: 10000
+  epsilon_decay_episodes: 8000
+  epsilon_end: 0.05
+  epsilon_start: 0.2
+  gamma: 1.0
+  seeds:
+  - 11
+  - 22
+  - 33
+  - 44
+  - 55
+  validation_interval: 500

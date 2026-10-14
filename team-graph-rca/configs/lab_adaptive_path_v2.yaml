@@ -1,0 +1,17 @@
+# The packaged orders properties bind DOMAIN with no prefix. Its URI builder
+# appends that domain to both payment and shipping hostnames.
+services:
+  orders:
+    environment:
+      DOMAIN: adaptive-v2
+  shipping:
+    networks:
+      sockshop:
+        aliases: [shipping.adaptive-v2]
+  payment-path-proxy:
+    image: sha256:ffccefc9317a154dc4431a25a5f13970d4d55617ae735bb2679e7668904c119e
+    cpus: 0.25
+    mem_limit: 64m
+    networks:
+      sockshop:
+        aliases: [payment.adaptive-v2]

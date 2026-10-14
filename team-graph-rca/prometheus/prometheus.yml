@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'sockshop'
+    static_configs:
+      - targets:
+          - 'front-end:8079'
+          - 'catalogue:80'
+          - 'carts:80'
+          - 'orders:80'
+          - 'payment:80'
+          - 'user:80'
+          - 'shipping:80'
+    metrics_path: '/metrics'
+    honor_labels: true

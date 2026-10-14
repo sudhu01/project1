@@ -1,0 +1,50 @@
+{
+  "checked_at": "2026-10-08T06:34:09.935290+00:00",
+  "passed": true,
+  "physical_readiness": {
+    "lease-images-ready": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\lease-images-ready.json"
+    },
+    "checkout-verification": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\checkout-verification.json"
+    },
+    "cart-verification": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\cart-verification.json"
+    },
+    "capabilities": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\capabilities.json"
+    },
+    "cpu-pilot-tail-confirmation": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\cpu-pilot-tail-confirmation.json"
+    },
+    "latency-pilot": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\latency-pilot.json"
+    },
+    "memory-pilot": {
+      "passed": true,
+      "report": "runs\\adaptive_v2\\memory-pilot.json"
+    }
+  },
+  "inventory_hash": "2ec5612a27716de1064327aca734a6be96a62731f6180b84001485bf4fe71dd8",
+  "accepted_count": 1,
+  "expected_count": 200,
+  "capture_complete": false,
+  "schedule_hash": "8ddbf1bd62359a476c72f9fbad9f1fb319e5206011568657c29df6bb60e8dfe8",
+  "verified_accepted": [
+    {
+      "slot": "v2b-train-01/0",
+      "incident_id": "3f6bb24e-8e79-466e-aa88-f03c8f8a51f9",
+      "raw_hash": "fe4292daafd3bf798a618e021a678ff666606f3d35c5face5f793e55d4c16573",
+      "receipt_checksum_verified": true,
+      "recovery_confirmed": true
+    }
+  ],
+  "private_labels_opened": false,
+  "policy_results_available": false
+}

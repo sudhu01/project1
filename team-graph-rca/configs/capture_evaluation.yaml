@@ -1,0 +1,11 @@
+dataset: datasets/sockshop_v1
+seed: 2202
+sessions:
+  - {id: train-1, per_class: 5, role: train, interval_seconds: 1}
+  - {id: train-2, per_class: 5, role: train, interval_seconds: 2}
+  - {id: train-3, per_class: 5, role: train, interval_seconds: 1}
+  - {id: train-4, per_class: 5, role: train, interval_seconds: 2}
+  - {id: validation-1, per_class: 5, role: validation, interval_seconds: 1}
+  - {id: validation-2, per_class: 5, role: validation, interval_seconds: 2}
+  - {id: test-1, per_class: 5, role: test, interval_seconds: 1}
+  - {id: test-2, per_class: 5, role: test, interval_seconds: 2}

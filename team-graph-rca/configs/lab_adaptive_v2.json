@@ -1,0 +1,10 @@
+{
+  "schema_version": 2,
+  "helper_sha256": "6c42d03620b1596d1a186ed1678c2b944bd27738839402c4eba4fd84c4661503",
+  "helper_architecture": "linux/amd64",
+  "maximum_lifetime_seconds": 240,
+  "maximum_workers": 16,
+  "maximum_allocation_bytes": 536870912,
+  "base_images": "configs/lab_pinned.yaml",
+  "proxy_verified": true
+}

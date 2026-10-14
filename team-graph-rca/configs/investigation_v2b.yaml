@@ -1,0 +1,198 @@
+schema_version: 2
+task_id: sockshop_adaptive_v2b
+resources:
+- front-end
+- catalogue
+- catalogue-db
+- orders
+- payment
+diagnoses:
+- resource/catalogue-db
+- resource/orders
+- resource/payment
+- edge/orders/payment
+- NO_FAULT
+entry_protocol: manual_frontend
+episode:
+  observation_window_seconds: 120
+  budget: 10
+  max_probes: 5
+objective:
+  lambda_cost: 0.05
+  correct: 1.0
+  incorrect: 0.0
+  defer: 0.25
+model:
+  prior: balanced_classes
+  smoothing: 0.1
+planner:
+  depth: 2
+  max_expanded_states: 50000
+training:
+  algorithm: expected_sarsa
+  episodes: 10000
+  alpha: 0.1
+  gamma: 1.0
+  epsilon_start: 0.2
+  epsilon_end: 0.05
+  epsilon_decay_episodes: 8000
+  validation_interval: 500
+  seeds:
+  - 11
+  - 22
+  - 33
+  - 44
+  - 55
+actions:
+- schema_version: 2
+  action_id: status/catalogue/v2
+  template: status
+  resource_id: catalogue
+  parameters_json: '{}'
+  credits: 1
+  required_capabilities:
+  - status
+  response_vocabulary:
+  - RUNNING
+  - STOPPED
+  - OTHER_STATE
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: status/catalogue-db/v2
+  template: status
+  resource_id: catalogue-db
+  parameters_json: '{}'
+  credits: 1
+  required_capabilities:
+  - status
+  response_vocabulary:
+  - RUNNING
+  - STOPPED
+  - OTHER_STATE
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: status/front-end/v2
+  template: status
+  resource_id: front-end
+  parameters_json: '{}'
+  credits: 1
+  required_capabilities:
+  - status
+  response_vocabulary:
+  - RUNNING
+  - STOPPED
+  - OTHER_STATE
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: status/orders/v2
+  template: status
+  resource_id: orders
+  parameters_json: '{}'
+  credits: 1
+  required_capabilities:
+  - status
+  response_vocabulary:
+  - RUNNING
+  - STOPPED
+  - OTHER_STATE
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: status/payment/v2
+  template: status
+  resource_id: payment
+  parameters_json: '{}'
+  credits: 1
+  required_capabilities:
+  - status
+  response_vocabulary:
+  - RUNNING
+  - STOPPED
+  - OTHER_STATE
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: cpu/payment/v2
+  template: cpu
+  resource_id: payment
+  parameters_json: '{"window_seconds":120}'
+  credits: 2
+  required_capabilities:
+  - cpu
+  response_vocabulary:
+  - NORMAL
+  - HIGH
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: request_errors/front-end/v2
+  template: request_errors
+  resource_id: front-end
+  parameters_json: '{"min_samples":20,"operation":"checkout","window_seconds":120}'
+  credits: 2
+  required_capabilities:
+  - request_errors
+  response_vocabulary:
+  - NORMAL
+  - HIGH_HTTP_ERRORS
+  - HIGH_TRANSPORT_FAILURES
+  - MIXED_FAILURES
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: logs/orders/v2
+  template: logs
+  resource_id: orders
+  parameters_json: '{"max_bytes":8192,"max_lines":20,"window_seconds":120}'
+  credits: 2
+  required_capabilities:
+  - logs
+  response_vocabulary:
+  - NO_RELEVANT_ERROR
+  - DEPENDENCY_ERROR
+  - RESOURCE_ERROR
+  - OTHER_ERROR
+  - UNAVAILABLE
+  - DEPENDENCY_ERROR/orders-db
+  - DEPENDENCY_ERROR/payment
+  - DEPENDENCY_ERROR/shipping
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: logs/payment/v2
+  template: logs
+  resource_id: payment
+  parameters_json: '{"max_bytes":8192,"max_lines":20,"window_seconds":120}'
+  credits: 2
+  required_capabilities:
+  - logs
+  response_vocabulary:
+  - NO_RELEVANT_ERROR
+  - DEPENDENCY_ERROR
+  - RESOURCE_ERROR
+  - OTHER_ERROR
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+- schema_version: 2
+  action_id: latency/front-end/v2
+  template: latency
+  resource_id: front-end
+  parameters_json: '{"min_samples":20,"operation":"checkout","window_seconds":120}'
+  credits: 2
+  required_capabilities:
+  - latency
+  response_vocabulary:
+  - NORMAL
+  - SLOW
+  - UNAVAILABLE
+  encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+encoding_hash: '0000000000000000000000000000000000000000000000000000000000000000'
+paths:
+  dataset: datasets/adaptive_v2b
+  raw_dataset: datasets/raw_v2b
+  encoder: experiments/v2b/encoder.json
+  model: runs/adaptive_v2b/model.json
+  runs: runs/adaptive_v2b
+  resource_registry: configs/resources_sockshop_v2.yaml

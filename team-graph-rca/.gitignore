@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment / secrets — NEVER commit these
+pipeline/.env
+.env
+*.env
+
+# Neo4j local data
+rca-project/neo4j/data/
+rca-project/neo4j/logs/
+rca-project/neo4j/import/
+rca-project/neo4j/plugins/
+
+# Logs and session data
+rca-project/data/chat_sessions.json
+rca-project/data/fault_log.json
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker volumes (if mounted locally)
+rca-project/volumes/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+neo4j/data/
+neo4j/logs/
+neo4j/import/
+neo4j/plugins/
+volumes/
+data/
+datasets/
+runs/
+experiments/local/
+.uv-cache/
+.pytest_cache/
+.go-cache/
+lab/adaptive-helper/rca-helper
+lab/adaptive-helper/rca-helper-lease
+lab/*-inspection.jar
+lab/*.class
+lab/path-proxy/rca-path-proxy

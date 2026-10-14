@@ -1,0 +1,23 @@
+schema_version: 1
+task_id: sockshop_stop_v1
+resources: [front-end, catalogue, catalogue-db, orders, payment]
+diagnoses: [catalogue-db, orders, NO_FAULT]
+entry_protocol: manual_frontend
+tools:
+  status: {enabled: true, credits: 1}
+  cpu: {enabled: false, credits: 2}
+  logs: {enabled: false, credits: 2, max_lines: 20}
+episode: {observation_window_seconds: 60, budget: 6, max_probes: 4}
+objective: {lambda_cost: 0.05, correct: 1.0, incorrect: 0.0, defer: 0.25}
+model: {prior: balanced_classes, smoothing: 0.10}
+planner: {depth: 2, max_expanded_states: 50000}
+training:
+  algorithm: expected_sarsa
+  episodes: 10000
+  alpha: 0.10
+  gamma: 1.0
+  epsilon_start: 0.20
+  epsilon_end: 0.05
+  epsilon_decay_episodes: 8000
+  validation_interval: 500
+  seeds: [11, 22, 33, 44, 55]

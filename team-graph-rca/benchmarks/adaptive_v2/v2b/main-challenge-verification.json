@@ -1,0 +1,48 @@
+{
+  "passed": true,
+  "checked_at": "2026-10-09T06:08:03.377917+00:00",
+  "scenarios_verified": 6,
+  "same_frozen_definitions": true,
+  "source_snapshots_per_method": 50,
+  "additional_physical_incidents": 0,
+  "synthetic_perturbations_only": true,
+  "selected": "dp",
+  "results": [
+    {
+      "scenario": "all-telemetry-outage",
+      "accuracy": 0.6,
+      "mean_return": 0.20999999999999996,
+      "mean_probes": 4.8
+    },
+    {
+      "scenario": "double-prices",
+      "accuracy": 1.0,
+      "mean_return": 0.68,
+      "mean_probes": 1.8
+    },
+    {
+      "scenario": "half-prices",
+      "accuracy": 1.0,
+      "mean_return": 0.91,
+      "mean_probes": 1.8
+    },
+    {
+      "scenario": "logs-outage",
+      "accuracy": 1.0,
+      "mean_return": 0.8399999999999999,
+      "mean_probes": 1.8
+    },
+    {
+      "scenario": "request-metrics-outage",
+      "accuracy": 0.8,
+      "mean_return": 0.42,
+      "mean_probes": 4.0
+    },
+    {
+      "scenario": "stats-outage",
+      "accuracy": 0.8,
+      "mean_return": 0.6399999999999999,
+      "mean_probes": 1.8
+    }
+  ]
+}

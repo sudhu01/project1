@@ -1,0 +1,6 @@
+# Engineering-only scheduling severity, held constant in healthy controls.
+services:
+  payment:
+    cpus: 0
+    cpu_period: 1000000
+    cpu_quota: 250000

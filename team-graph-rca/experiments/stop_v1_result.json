@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "completed_on": "2026-10-07",
+  "task": "stop_v1",
+  "source_commit_at_selection": "07aa3dd",
+  "evaluation_physical_incidents": 120,
+  "pilot_physical_incidents": 30,
+  "pilot_rejected_attempts": 2,
+  "evaluation_rejected_attempts": 0,
+  "class_counts": {
+    "test": {
+      "NO_FAULT": 10,
+      "catalogue-db": 10,
+      "orders": 10
+    },
+    "train": {
+      "NO_FAULT": 20,
+      "catalogue-db": 20,
+      "orders": 20
+    },
+    "validation": {
+      "NO_FAULT": 10,
+      "catalogue-db": 10,
+      "orders": 10
+    }
+  },
+  "split_hash": "b32616ed7bb650275004f046d1b55e708f67aeebfe3e4559dc275f4beabf9235",
+  "model_hash": "98eed1c2fca4b275ffd3f3f41afe063084a09980178766ad61997577a8a1d17b",
+  "frozen_hash": "ea30242b5336563ccfd9ab09c913c6592eef5f0a25b29e15f257d4904aa668b9",
+  "runtime_hash": "afa4ee2149f99f345a48d37f1a04f4471aa9708a4720c303636e8c2c7b72466e",
+  "selected": "dependency-rule",
+  "reserved_test": {
+    "accuracy": 1.0,
+    "brier_score": 0.001078491541885409,
+    "calibration_bins": [
+      {
+        "accuracy": 1.0,
+        "count": 30,
+        "lower": 0.9,
+        "mean_confidence": 0.9745908981669612
+      }
+    ],
+    "confusion": {
+      "NO_FAULT": {
+        "NO_FAULT": 10
+      },
+      "catalogue-db": {
+        "catalogue-db": 10
+      },
+      "orders": {
+        "orders": 10
+      }
+    },
+    "coverage": 1.0,
+    "decision_latency_ms": 0.005066251469543204,
+    "fallback_frequency": 0.0,
+    "lightly_visited_fraction": 0.0,
+    "mean_credits": 1.6666666666666667,
+    "mean_probes": 1.6666666666666667,
+    "mean_return": 0.9166666666666664,
+    "physical_incidents": 30,
+    "planner_expanded_states": 0,
+    "repeated_request_attempts": 0,
+    "selective_accuracy": 1.0,
+    "termination_reasons": {
+      "voluntary": 30
+    },
+    "tool_failure_rate": 0.0,
+    "unseen_state_fraction": 0.0
+  },
+  "training": {
+    "episodes_per_run": 10000,
+    "validation_seed_spread": {
+      "expected-sarsa-hybrid": {
+        "mean": 0.9166666666666664,
+        "range": [
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "returns": [
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "seeds": [
+          11,
+          22,
+          33,
+          44,
+          55
+        ],
+        "standard_deviation": 0.0
+      },
+      "expected-sarsa-tabular": {
+        "mean": 0.9166666666666664,
+        "range": [
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "returns": [
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "seeds": [
+          11,
+          22,
+          33,
+          44,
+          55
+        ],
+        "standard_deviation": 0.0
+      },
+      "two-step-sarsa-hybrid": {
+        "mean": 0.9166666666666664,
+        "range": [
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "returns": [
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "seeds": [
+          11,
+          22,
+          33,
+          44,
+          55
+        ],
+        "standard_deviation": 0.0
+      },
+      "two-step-sarsa-tabular": {
+        "mean": 0.9166666666666664,
+        "range": [
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "returns": [
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664,
+          0.9166666666666664
+        ],
+        "seeds": [
+          11,
+          22,
+          33,
+          44,
+          55
+        ],
+        "standard_deviation": 0.0
+      }
+    },
+    "methods": [
+      "expected-sarsa",
+      "two-step-sarsa"
+    ],
+    "seeds": [
+      11,
+      22,
+      33,
+      44,
+      55
+    ],
+    "total_replay_episodes": 100000
+  },
+  "paired_planner_vs_rule": {
+    "independent_sessions": 2,
+    "mean_paired_return_difference": 0.0,
+    "resamples": 2000,
+    "seed": 11,
+    "session_bootstrap_95": [
+      0.0,
+      0.0
+    ]
+  },
+  "limitations": [
+    "Only catalogue-db stop, orders stop and NO_FAULT are supported.",
+    "Two independent reserved-test sessions limit statistical claims.",
+    "No measured gain from RL or planning over the rule.",
+    "Synthetic full status outage gives 1/3 accuracy.",
+    "Selected rule does not defer on synthetic unsupported-payment or simultaneous-stop packets.",
+    "Half prices do not change one-credit tools.",
+    "Additional physical challenges and evolving live episodes are future experiments.",
+    "AWS template preparation only; no AWS execution or accuracy claim."
+  ],
+  "artifacts": {
+    "frozen": "experiments/local/final_v1.json",
+    "application": "runs/integration_v1/application/verification.json",
+    "challenges": "runs/integration_v1/challenges.json",
+    "final_health": "runs/integration_v1/final-live-validation.json",
+    "test": "runs/integration_v1/compare-test.json",
+    "validation": "runs/integration_v1/compare-validation.json"
+  },
+  "artifact_sha256": {
+    "challenges": "db303ee210a1c8ec28b321c5ed324ea37ae8eae2e1e63e92c6d7d13664269395",
+    "test": "883c03f74eee1efd5d7d59b3ef2f6b71828c26a378dd3ed3e9fedd6bf99b11a7",
+    "application": "ddf91ccfe206eead7242daffce202af5fec927408798f467e90d3c3f33f2fa94",
+    "frozen": "a3880124088894001b46db5939501a7f78f626fcc26e5f7346473a7d4e4d2bb1",
+    "final_health": "24f155ba10d015cbf48df596f7493ddbfb3093f859b584edda4885e3f4e08ade",
+    "validation": "5af58218945cc863520aa285a6a34314feb51a93afbda17185d3aceaeb75476b"
+  }
+}

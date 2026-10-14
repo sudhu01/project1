@@ -1,0 +1,50 @@
+{
+  "Expected SARSA tabular": {
+    "accuracy": 0.7666666666666667,
+    "mean_return": 0.5008333333333332,
+    "mean_probes": 3.9,
+    "mean_credits": 5.316666666666666,
+    "decision_latency_ms": 0.18486892337515484,
+    "fallback_frequency": 0.0
+  },
+  "Expected SARSA hybrid": {
+    "accuracy": 0.8166666666666668,
+    "mean_return": 0.5561666666666666,
+    "mean_probes": 3.646666666666667,
+    "mean_credits": 5.21,
+    "decision_latency_ms": 126.03683989261424,
+    "fallback_frequency": 0.08624896608767577
+  },
+  "Two-step SARSA tabular": {
+    "accuracy": 0.7966666666666666,
+    "mean_return": 0.5293333333333333,
+    "mean_probes": 3.7166666666666663,
+    "mean_credits": 5.363333333333333,
+    "decision_latency_ms": 0.12863620412435822,
+    "fallback_frequency": 0.0
+  },
+  "Two-step SARSA hybrid": {
+    "accuracy": 0.8833333333333334,
+    "mean_return": 0.6088333333333333,
+    "mean_probes": 3.56,
+    "mean_credits": 5.49,
+    "decision_latency_ms": 89.19556971697328,
+    "fallback_frequency": 0.12603216658477495
+  },
+  "VOI": {
+    "accuracy": 0.9333333333333333,
+    "mean_return": 0.7200000000000001,
+    "mean_probes": 2.3,
+    "mean_credits": 4.266666666666667,
+    "decision_latency_ms": 27.58680050898663,
+    "fallback_frequency": 0.0
+  },
+  "DP": {
+    "accuracy": 0.9333333333333333,
+    "mean_return": 0.7200000000000001,
+    "mean_probes": 2.3,
+    "mean_credits": 4.266666666666667,
+    "decision_latency_ms": 1663.4963136395636,
+    "fallback_frequency": 0.0
+  }
+}
